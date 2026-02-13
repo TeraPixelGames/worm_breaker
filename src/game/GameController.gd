@@ -4,7 +4,7 @@ const BRICK_SCENE: PackedScene = preload("res://src/scenes/Brick.tscn")
 const TunnelMath = preload("res://src/game/TunnelMath.gd")
 const Collision = preload("res://src/game/Collision.gd")
 const LevelLoader = preload("res://src/game/LevelLoader.gd")
-
+const TUNNEL_FORWARD: Vector3 = Vector3(0.0, 0.0, 1.0)
 const BALL_THETA_RADIUS: float = 0.12
 const BALL_Z_RADIUS: float = 0.34
 const BALL_WORLD_RADIUS: float = 0.18
@@ -274,7 +274,7 @@ func _update_paddle_visual() -> void:
 			t = float(i) / float(_paddle_segments.size() - 1) - 0.5
 		var segment_theta: float = TunnelMath.wrap_angle(_paddle_theta + t * _paddle_width)
 		var tangent: Vector3 = Vector3(-sin(segment_theta), cos(segment_theta), 0.0).normalized()
-		var forward: Vector3 = Vector3.FORWARD
+		var forward: Vector3 = TUNNEL_FORWARD
 		var inward: Vector3 = -Vector3(cos(segment_theta), sin(segment_theta), 0.0).normalized()
 		segment.position = TunnelMath.surface_to_world(segment_theta, _paddle_z, _play_radius)
 		segment.basis = Basis(tangent, forward, inward).orthonormalized()
@@ -311,7 +311,7 @@ func _update_camera(delta: float, snap: bool = false) -> void:
 	var paddle_pos: Vector3 = TunnelMath.surface_to_world(_paddle_theta, _paddle_z, _play_radius)
 	var outward: Vector3 = Vector3(cos(_paddle_theta), sin(_paddle_theta), 0.0).normalized()
 	var inward: Vector3 = -outward
-	var forward: Vector3 = Vector3.FORWARD
+	var forward: Vector3 = TUNNEL_FORWARD
 
 	var cam_target: Vector3 = paddle_pos + inward * 2.4 - forward * 7.2
 	if snap:
