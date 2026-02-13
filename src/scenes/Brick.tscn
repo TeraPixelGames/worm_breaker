@@ -1,0 +1,12 @@
+[gd_scene load_steps=3 format=3]
+
+[ext_resource type="Script" path="res://src/game/Brick.gd" id="1"]
+
+[sub_resource type="BoxMesh" id="1"]
+size = Vector3(0.6, 0.9, 0.28)
+
+[node name="Brick" type="Node3D"]
+script = ExtResource("1")
+
+[node name="Body" type="MeshInstance3D" parent="."]
+mesh = SubResource("1")

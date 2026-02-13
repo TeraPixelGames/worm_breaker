@@ -1,0 +1,22 @@
+; Engine configuration file.
+; It's best edited using the editor UI and not directly.
+
+config_version=5
+
+[application]
+
+config/name="wormbreak"
+run/main_scene="res://src/scenes/Boot.tscn"
+config/features=PackedStringArray("4.5", "Mobile")
+config/icon="res://icon.svg"
+
+[autoload]
+
+SaveStore="*res://src/core/SaveStore.gd"
+RunManager="*res://src/core/RunManager.gd"
+MusicManager="*res://src/core/MusicManager.gd"
+VFXManager="*res://src/core/VFXManager.gd"
+
+[rendering]
+
+renderer/rendering_method="mobile"

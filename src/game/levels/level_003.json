@@ -1,0 +1,37 @@
+{
+	"id": 3,
+	"tunnel_radius": 6.0,
+	"paddle_width": 0.88,
+	"paddle_z": 3.0,
+	"start_speed_theta": 0.45,
+	"start_speed_z": 9.2,
+	"brick_theta_size": 0.4,
+	"brick_z_size": 0.88,
+	"bricks": [
+		{"theta_center": -2.4, "z_center": 12.5, "hp": 1},
+		{"theta_center": -1.8, "z_center": 12.5, "hp": 2},
+		{"theta_center": -1.2, "z_center": 12.5, "hp": 1},
+		{"theta_center": -0.6, "z_center": 12.5, "hp": 2},
+		{"theta_center": 0.0, "z_center": 12.5, "hp": 1},
+		{"theta_center": 0.6, "z_center": 12.5, "hp": 2},
+		{"theta_center": 1.2, "z_center": 12.5, "hp": 1},
+		{"theta_center": 1.8, "z_center": 12.5, "hp": 2},
+		{"theta_center": 2.4, "z_center": 12.5, "hp": 1},
+
+		{"theta_center": -2.1, "z_center": 15.1, "hp": 2},
+		{"theta_center": -1.5, "z_center": 15.1, "hp": 1},
+		{"theta_center": -0.9, "z_center": 15.1, "hp": 2},
+		{"theta_center": -0.3, "z_center": 15.1, "hp": 1},
+		{"theta_center": 0.3, "z_center": 15.1, "hp": 2},
+		{"theta_center": 0.9, "z_center": 15.1, "hp": 1},
+		{"theta_center": 1.5, "z_center": 15.1, "hp": 2},
+		{"theta_center": 2.1, "z_center": 15.1, "hp": 1},
+
+		{"theta_center": -1.75, "z_center": 18.0, "hp": 1},
+		{"theta_center": -1.05, "z_center": 18.0, "hp": 2},
+		{"theta_center": -0.35, "z_center": 18.0, "hp": 1},
+		{"theta_center": 0.35, "z_center": 18.0, "hp": 2},
+		{"theta_center": 1.05, "z_center": 18.0, "hp": 1},
+		{"theta_center": 1.75, "z_center": 18.0, "hp": 2}
+	]
+}

@@ -1,0 +1,64 @@
+[gd_scene load_steps=2 format=3]
+
+[ext_resource type="Script" path="res://src/ui/MainMenu.gd" id="1"]
+
+[node name="MainMenu" type="Control"]
+layout_mode = 3
+anchors_preset = 15
+anchor_right = 1.0
+anchor_bottom = 1.0
+grow_horizontal = 2
+grow_vertical = 2
+script = ExtResource("1")
+
+[node name="Background" type="ColorRect" parent="."]
+layout_mode = 1
+anchors_preset = 15
+anchor_right = 1.0
+anchor_bottom = 1.0
+grow_horizontal = 2
+grow_vertical = 2
+color = Color(0.0431373, 0.054902, 0.0823529, 1)
+
+[node name="Center" type="CenterContainer" parent="."]
+layout_mode = 1
+anchors_preset = 15
+anchor_right = 1.0
+anchor_bottom = 1.0
+grow_horizontal = 2
+grow_vertical = 2
+
+[node name="VBox" type="VBoxContainer" parent="Center"]
+layout_mode = 2
+theme_override_constants/separation = 14
+
+[node name="TitleLabel" type="Label" parent="Center/VBox"]
+layout_mode = 2
+theme_override_font_sizes/font_size = 56
+text = "WormBreak"
+horizontal_alignment = 1
+
+[node name="SubtitleLabel" type="Label" parent="Center/VBox"]
+layout_mode = 2
+theme_override_font_sizes/font_size = 22
+text = "Tunnel Brick Breaker"
+horizontal_alignment = 1
+
+[node name="SummaryLabel" type="Label" parent="Center/VBox"]
+layout_mode = 2
+theme_override_font_sizes/font_size = 18
+text = "Best Level: 1   High Score: 0"
+horizontal_alignment = 1
+
+[node name="StartButton" type="Button" parent="Center/VBox"]
+layout_mode = 2
+custom_minimum_size = Vector2(220, 48)
+text = "Start Run"
+
+[node name="QuitButton" type="Button" parent="Center/VBox"]
+layout_mode = 2
+custom_minimum_size = Vector2(220, 48)
+text = "Quit"
+
+[connection signal="pressed" from="Center/VBox/StartButton" to="." method="_on_start_button_pressed"]
+[connection signal="pressed" from="Center/VBox/QuitButton" to="." method="_on_quit_button_pressed"]
