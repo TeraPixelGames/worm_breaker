@@ -9,16 +9,26 @@ var current_level_index: int = 1
 var run_score: int = 0
 var last_result_win: bool = false
 var last_completed_level: int = 1
+var run_style: String = "stability"
+var last_rival_target: int = 1200
+var last_rival_beaten: bool = false
 
 func go_to_main_menu() -> void:
 	current_level_index = 1
 	run_score = 0
 	_change_scene(MAIN_MENU_SCENE)
 
-func start_new_run() -> void:
+func start_new_run(style: String = "") -> void:
+	if not style.is_empty():
+		run_style = style
 	current_level_index = 1
 	run_score = 0
 	_change_scene(GAME_SCENE)
+
+func set_run_style(style: String) -> void:
+	if style.strip_edges().is_empty():
+		return
+	run_style = style.strip_edges().to_lower()
 
 func start_level(level_index: int) -> void:
 	current_level_index = max(1, level_index)
@@ -36,6 +46,9 @@ func go_to_results(win: bool, completed_level: int, score: int) -> void:
 	last_completed_level = max(1, completed_level)
 	run_score = max(0, score)
 	SaveStore.record_score(run_score)
+	SaveStore.record_run_result(win)
+	last_rival_target = SaveStore.refresh_rival_target()
+	last_rival_beaten = SaveStore.record_rival_result(run_score)
 	_change_scene(RESULTS_SCENE)
 
 func _change_scene(scene_path: String) -> void:

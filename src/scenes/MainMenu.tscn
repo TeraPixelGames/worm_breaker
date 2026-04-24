@@ -1,6 +1,44 @@
-[gd_scene load_steps=2 format=3]
+[gd_scene load_steps=5 format=3]
 
 [ext_resource type="Script" path="res://src/ui/MainMenu.gd" id="1"]
+
+[sub_resource type="StyleBoxFlat" id="1_primary"]
+bg_color = Color(0.88, 0.72, 0.34, 0.96)
+border_width_left = 1
+border_width_top = 1
+border_width_right = 1
+border_width_bottom = 1
+border_color = Color(1, 0.97, 0.88, 0.76)
+corner_radius_top_left = 24
+corner_radius_top_right = 24
+corner_radius_bottom_right = 24
+corner_radius_bottom_left = 24
+
+[sub_resource type="StyleBoxFlat" id="2_secondary"]
+bg_color = Color(0.17, 0.12, 0.18, 0.92)
+border_width_left = 1
+border_width_top = 1
+border_width_right = 1
+border_width_bottom = 1
+border_color = Color(0.98, 0.72, 0.3, 0.34)
+corner_radius_top_left = 24
+corner_radius_top_right = 24
+corner_radius_bottom_right = 24
+corner_radius_bottom_left = 24
+
+[sub_resource type="StyleBoxFlat" id="3_panel"]
+bg_color = Color(0.08, 0.06, 0.08, 0.9)
+border_width_left = 2
+border_width_top = 2
+border_width_right = 2
+border_width_bottom = 2
+border_color = Color(0.96, 0.68, 0.24, 0.3)
+corner_radius_top_left = 34
+corner_radius_top_right = 34
+corner_radius_bottom_right = 34
+corner_radius_bottom_left = 34
+shadow_color = Color(0, 0, 0, 0.28)
+shadow_size = 20
 
 [node name="MainMenu" type="Control"]
 layout_mode = 3
@@ -18,7 +56,16 @@ anchor_right = 1.0
 anchor_bottom = 1.0
 grow_horizontal = 2
 grow_vertical = 2
-color = Color(0.0431373, 0.054902, 0.0823529, 1)
+color = Color(0.03, 0.03, 0.05, 1)
+
+[node name="AccentGlow" type="ColorRect" parent="."]
+layout_mode = 1
+anchors_preset = 15
+anchor_right = 1.0
+anchor_bottom = 1.0
+grow_horizontal = 2
+grow_vertical = 2
+color = Color(0.4, 0.14, 0.02, 0.18)
 
 [node name="Center" type="CenterContainer" parent="."]
 layout_mode = 1
@@ -28,37 +75,76 @@ anchor_bottom = 1.0
 grow_horizontal = 2
 grow_vertical = 2
 
-[node name="VBox" type="VBoxContainer" parent="Center"]
+[node name="Panel" type="Panel" parent="Center"]
+custom_minimum_size = Vector2(660, 0)
+layout_mode = 2
+theme_override_styles/panel = SubResource("3_panel")
+
+[node name="VBox" type="VBoxContainer" parent="Center/Panel"]
 layout_mode = 2
 theme_override_constants/separation = 14
 
-[node name="TitleLabel" type="Label" parent="Center/VBox"]
+[node name="Kicker" type="Label" parent="Center/Panel/VBox"]
 layout_mode = 2
-theme_override_font_sizes/font_size = 56
+text = "TUNNEL BREAKER"
+horizontal_alignment = 1
+theme_override_colors/font_color = Color(1, 0.82, 0.48, 0.92)
+theme_override_font_sizes/font_size = 20
+
+[node name="TitleLabel" type="Label" parent="Center/Panel/VBox"]
+layout_mode = 2
+theme_override_font_sizes/font_size = 62
+theme_override_colors/font_color = Color(1, 0.97, 0.92, 1)
 text = "WormBreak"
 horizontal_alignment = 1
 
-[node name="SubtitleLabel" type="Label" parent="Center/VBox"]
+[node name="SubtitleLabel" type="Label" parent="Center/Panel/VBox"]
 layout_mode = 2
-theme_override_font_sizes/font_size = 22
+theme_override_font_sizes/font_size = 24
+theme_override_colors/font_color = Color(0.92, 0.88, 0.8, 0.86)
 text = "Tunnel Brick Breaker"
 horizontal_alignment = 1
 
-[node name="SummaryLabel" type="Label" parent="Center/VBox"]
+[node name="SignalLabel" type="Label" parent="Center/Panel/VBox"]
+layout_mode = 2
+theme_override_font_sizes/font_size = 18
+theme_override_colors/font_color = Color(1, 0.83, 0.62, 0.8)
+text = "STABILITY   •   OVERDRIVE   •   RIVAL PUSH"
+horizontal_alignment = 1
+
+[node name="SummaryLabel" type="Label" parent="Center/Panel/VBox"]
 layout_mode = 2
 theme_override_font_sizes/font_size = 18
 text = "Best Level: 1   High Score: 0"
 horizontal_alignment = 1
 
-[node name="StartButton" type="Button" parent="Center/VBox"]
+[node name="StartButton" type="Button" parent="Center/Panel/VBox"]
 layout_mode = 2
-custom_minimum_size = Vector2(220, 48)
-text = "Start Run"
+custom_minimum_size = Vector2(260, 58)
+theme_override_colors/font_color = Color(0.18, 0.08, 0.02, 1)
+theme_override_styles/normal = SubResource("1_primary")
+theme_override_styles/hover = SubResource("1_primary")
+theme_override_styles/pressed = SubResource("1_primary")
+text = "Start Stability Run"
 
-[node name="QuitButton" type="Button" parent="Center/VBox"]
+[node name="OverdriveButton" type="Button" parent="Center/Panel/VBox"]
 layout_mode = 2
-custom_minimum_size = Vector2(220, 48)
+custom_minimum_size = Vector2(260, 58)
+theme_override_colors/font_color = Color(0.96, 0.98, 1, 1)
+theme_override_styles/normal = SubResource("2_secondary")
+theme_override_styles/hover = SubResource("1_primary")
+theme_override_styles/pressed = SubResource("1_primary")
+text = "Start Overdrive Run"
+
+[node name="QuitButton" type="Button" parent="Center/Panel/VBox"]
+layout_mode = 2
+custom_minimum_size = Vector2(260, 52)
+theme_override_colors/font_color = Color(0.96, 0.98, 1, 1)
+theme_override_styles/normal = SubResource("2_secondary")
+theme_override_styles/hover = SubResource("2_secondary")
+theme_override_styles/pressed = SubResource("2_secondary")
 text = "Quit"
 
-[connection signal="pressed" from="Center/VBox/StartButton" to="." method="_on_start_button_pressed"]
-[connection signal="pressed" from="Center/VBox/QuitButton" to="." method="_on_quit_button_pressed"]
+[connection signal="pressed" from="Center/Panel/VBox/StartButton" to="." method="_on_start_button_pressed"]
+[connection signal="pressed" from="Center/Panel/VBox/OverdriveButton" to="." method="_on_overdrive_button_pressed"]
+[connection signal="pressed" from="Center/Panel/VBox/QuitButton" to="." method="_on_quit_button_pressed"]

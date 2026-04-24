@@ -22,6 +22,11 @@ RunManager="*res://src/core/RunManager.gd"
 MusicManager="*res://src/core/MusicManager.gd"
 VFXManager="*res://src/core/VFXManager.gd"
 
+SaveManager="*res://addons/arcade_core/SaveManager.gd"
+StreakManager="*res://addons/arcade_core/StreakManager.gd"
+AudioManager="*res://addons/arcade_core/AudioManager.gd"
+Fx="*res://addons/arcade_core/Fx.gd"
+AdManager="*res://addons/arcade_core/AdManager.gd"
 [display]
 
 window/size/viewport_width=1080
@@ -29,6 +34,9 @@ window/size/viewport_height=1920
 window/size/mode=4
 window/handheld/orientation=1
 
+window/size/resizable=true
+window/stretch/mode="canvas_items"
+window/stretch/aspect="expand"
 [rendering]
 
 renderer/rendering_method="mobile"

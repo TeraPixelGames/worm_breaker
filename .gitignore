@@ -1,4 +1,4 @@
-# Godot 4 generated files
+﻿# Godot 4 generated files
 .godot/
 /.import/
 /android/
@@ -7,3 +7,10 @@
 # User-specific editor files
 *.tmp
 *.swp
+/configs/AdMob.local.txt
+
+# Local verification/capture output
+tmp/
+/tmp/
+changes.patch
+

@@ -11,6 +11,8 @@ const BALL_WORLD_RADIUS: float = 0.18
 const PADDLE_SEGMENT_COUNT: int = 11
 const PADDLE_SURFACE_INSET: float = 0.24
 const COMBO_RESET_TIME: float = 1.2
+const STYLE_STABILITY := "stability"
+const STYLE_OVERDRIVE := "overdrive"
 
 @onready var tunnel: MeshInstance3D = $World/Tunnel
 @onready var paddle_root: Node3D = $World/PaddleRoot
@@ -21,6 +23,9 @@ const COMBO_RESET_TIME: float = 1.2
 @onready var combo_sfx: AudioStreamPlayer = $ComboSfx
 @onready var score_label: Label = $HUD/Panel/VBox/ScoreLabel
 @onready var level_label: Label = $HUD/Panel/VBox/LevelLabel
+@onready var objective_label: Label = $HUD/Panel/VBox/ObjectiveLabel
+@onready var style_label: Label = $HUD/Panel/VBox/StyleLabel
+@onready var phase_label: Label = $HUD/Panel/VBox/PhaseLabel
 @onready var combo_label: Label = $HUD/Panel/VBox/ComboLabel
 @onready var message_label: Label = $HUD/MessageLabel
 
@@ -48,9 +53,14 @@ var _shake_amount: float = 0.0
 
 var _paddle_segments: Array[MeshInstance3D] = []
 var _bricks: Array = []
+var _initial_brick_count: int = 0
+var _run_style: String = STYLE_STABILITY
+var _rival_target: int = 1200
 
 func _ready() -> void:
 	MusicManager.play_game()
+	_run_style = str(RunManager.run_style).to_lower()
+	_rival_target = SaveStore.refresh_rival_target()
 	_setup_ball_visual()
 	_build_paddle_segments()
 	_load_level(max(1, RunManager.current_level_index))
@@ -158,7 +168,13 @@ func _apply_brick_reflection(hit_info: Dictionary) -> void:
 func _register_combo_hit() -> void:
 	_chain_combo += 1
 	_combo_timeout = COMBO_RESET_TIME
-	RunManager.add_score(100 + (_chain_combo - 1) * 30)
+	var style_mult := 1.0
+	if _run_style == STYLE_OVERDRIVE:
+		style_mult = 1.25
+	elif _run_style == STYLE_STABILITY:
+		style_mult = 0.95
+	var points := int(round((100 + (_chain_combo - 1) * 30) * style_mult))
+	RunManager.add_score(points)
 	if combo_sfx != null and combo_sfx.has_method("play_combo"):
 		combo_sfx.play_combo(_chain_combo)
 	if _chain_combo >= 2:
@@ -187,6 +203,23 @@ func _load_level(level_index: int) -> void:
 	_chain_combo = 0
 	_combo_timeout = 0.0
 	_pending_transition = false
+
+	if _run_style == STYLE_OVERDRIVE:
+		_ball_v_theta *= 1.20
+		_ball_v_z *= 1.14
+		_paddle_width *= 0.92
+	else:
+		_ball_v_theta *= 0.94
+		_ball_v_z *= 0.95
+		_paddle_width *= 1.04
+
+	# Adaptive guardrail: after repeated failures, widen paddle and reduce speed spikes.
+	if SaveStore.fail_streak >= 2:
+		var fail_help: int = min(SaveStore.fail_streak, 4)
+		_paddle_width += 0.05 * float(fail_help)
+		_ball_v_z *= 0.96
+		_ball_v_theta *= 0.97
+
 	if rot_input != null and rot_input.has_method("reset"):
 		rot_input.reset()
 	_level_end_z = _compute_level_end_z()
@@ -196,7 +229,7 @@ func _load_level(level_index: int) -> void:
 	_update_ball_visual()
 	_update_paddle_visual()
 	_update_camera(0.0, true)
-	_show_message("Level %d" % _level_index, 1.0)
+	_show_message("Level %d - %s" % [_level_index, "Overdrive" if _run_style == STYLE_OVERDRIVE else "Stability"], 1.0)
 
 func _compute_level_end_z() -> float:
 	var farthest_brick_z: float = 12.0
@@ -304,6 +337,7 @@ func _spawn_bricks() -> void:
 		brick_root.add_child(brick)
 		brick.call("setup", brick_data, _play_radius, default_theta_size, default_z_size)
 		_bricks.append(brick)
+	_initial_brick_count = _bricks.size()
 
 func _update_camera(delta: float, snap: bool = false) -> void:
 	# Adapted from wormhole_raiders AngleSystem camera strategy:
@@ -376,4 +410,18 @@ func _hide_message_deferred(delay: float) -> void:
 func _update_hud() -> void:
 	score_label.text = "Score: %d" % RunManager.run_score
 	level_label.text = "Level: %d/%d" % [_level_index, LevelLoader.level_count()]
+	objective_label.text = "Objective: shatter all tunnel wards. Missing the paddle ends the run. Rival target: %d" % _rival_target
+	style_label.text = "Style: %s%s" % [
+		"Overdrive" if _run_style == STYLE_OVERDRIVE else "Stability",
+		"  (assist active)" if SaveStore.fail_streak >= 2 else ""
+	]
+	var remaining: int = _bricks.size()
+	var destroyed: int = max(_initial_brick_count - remaining, 0)
+	var progress_ratio: float = 0.0 if _initial_brick_count <= 0 else float(destroyed) / float(_initial_brick_count)
+	var phase: String = "Warm-up"
+	if progress_ratio >= 0.75:
+		phase = "Clutch"
+	elif progress_ratio >= 0.35:
+		phase = "Pressure Peak"
+	phase_label.text = "Phase: %s  Bricks: %d/%d" % [phase, destroyed, _initial_brick_count]
 	combo_label.text = "Combo: %d" % _chain_combo
