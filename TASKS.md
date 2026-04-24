@@ -46,5 +46,10 @@ Next implementation tasks:
 
 <!-- END CODEX REVIEW 2026-04-24 -->
 
+## Gameplay Review - 2026-04-24
+- [x] Reviewed current loop: tunnel brick breaker has coherent paddle, level, combo, and run progression rules.
+- [x] Renamed project display name to `Worm Breaker`.
+- [x] Verified unit suite with `scripts/run-tests.ps1 -Suite unit`.
+
 
 
