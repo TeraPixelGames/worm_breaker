@@ -15,3 +15,8 @@ func test_rival_pressure_reads_as_gauge() -> void:
 func test_results_titles_match_signal_story() -> void:
 	assert_equal(Results.results_title_text(true), "SPIRAL CLEAR", "Win result should use payoff chamber language")
 	assert_equal(Results.results_title_text(false), "SIGNAL LOST", "Loss result should use signal story language")
+
+func test_powerup_tutorial_copy_explains_effects() -> void:
+	assert_true(GameController.powerup_tutorial_text("WIDE").contains("stretch"), "Wide module tutorial should explain the stabilizer effect")
+	assert_true(GameController.powerup_tutorial_text("SLOW").contains("reducing tunnel speed"), "Slow module tutorial should explain the speed effect")
+	assert_true(GameController.powerup_tutorial_text("BLAST").contains("shatter"), "Blast module tutorial should explain the fragment effect")

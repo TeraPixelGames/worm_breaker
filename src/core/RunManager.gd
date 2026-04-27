@@ -12,10 +12,12 @@ var last_completed_level: int = 1
 var run_style: String = "stability"
 var last_rival_target: int = 1200
 var last_rival_beaten: bool = false
+var tutorial_requested: bool = false
 
 func go_to_main_menu() -> void:
 	current_level_index = 1
 	run_score = 0
+	tutorial_requested = false
 	_change_scene(MAIN_MENU_SCENE)
 
 func start_new_run(style: String = "") -> void:
@@ -23,6 +25,14 @@ func start_new_run(style: String = "") -> void:
 		run_style = style
 	current_level_index = 1
 	run_score = 0
+	tutorial_requested = false
+	_change_scene(GAME_SCENE)
+
+func start_tutorial_run() -> void:
+	run_style = "stability"
+	current_level_index = 1
+	run_score = 0
+	tutorial_requested = true
 	_change_scene(GAME_SCENE)
 
 func set_run_style(style: String) -> void:

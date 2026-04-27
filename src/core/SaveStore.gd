@@ -9,6 +9,7 @@ var fail_streak: int = 0
 var rival_target: int = 1200
 var rival_anchor_date: String = ""
 var rival_beat_streak: int = 0
+var tutorial_prompts_disabled: bool = false
 
 func _ready() -> void:
 	load_data()
@@ -34,6 +35,7 @@ func load_data() -> void:
 	rival_target = max(1200, int(data.get("rival_target", 1200)))
 	rival_anchor_date = str(data.get("rival_anchor_date", ""))
 	rival_beat_streak = max(0, int(data.get("rival_beat_streak", 0)))
+	tutorial_prompts_disabled = bool(data.get("tutorial_prompts_disabled", false))
 
 func save_data() -> void:
 	var data: Dictionary = {
@@ -43,7 +45,8 @@ func save_data() -> void:
 		"fail_streak": fail_streak,
 		"rival_target": rival_target,
 		"rival_anchor_date": rival_anchor_date,
-		"rival_beat_streak": rival_beat_streak
+		"rival_beat_streak": rival_beat_streak,
+		"tutorial_prompts_disabled": tutorial_prompts_disabled
 	}
 	var file: FileAccess = FileAccess.open(SAVE_PATH, FileAccess.WRITE)
 	if file == null:
@@ -90,6 +93,12 @@ func record_rival_result(score: int) -> bool:
 		rival_beat_streak = 0
 	save_data()
 	return beat
+
+func set_tutorial_prompts_disabled(disabled: bool) -> void:
+	if tutorial_prompts_disabled == disabled:
+		return
+	tutorial_prompts_disabled = disabled
+	save_data()
 
 func _today_key() -> String:
 	var date := Time.get_date_dict_from_system()

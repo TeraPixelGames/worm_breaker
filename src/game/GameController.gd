@@ -136,6 +136,14 @@ var _tutorial_rotate_seen: bool = false
 var _tutorial_catch_seen: bool = false
 var _tutorial_fragment_seen: bool = false
 var _tutorial_powerup_seen: bool = false
+var _tutorial_pause_active: bool = false
+var _tutorial_pause_kind: String = ""
+var _tutorial_focus: String = ""
+var _tutorial_overlay: PanelContainer
+var _tutorial_title_label: Label
+var _tutorial_body_label: Label
+var _tutorial_continue_button: Button
+var _tutorial_disable_check: CheckBox
 var _message_serial: int = 0
 
 func _ready() -> void:
@@ -153,6 +161,7 @@ func _ready() -> void:
 	_build_ball_tracers()
 	_build_impact_particles()
 	_build_powerup_root()
+	_build_tutorial_overlay()
 	_build_tunnel_end_portal()
 	_build_paddle_segments()
 	_load_level(max(1, RunManager.current_level_index))
@@ -170,6 +179,13 @@ func _physics_process(delta: float) -> void:
 	_update_psychedelic_materials()
 	_update_fractal_overlay()
 	_update_impact_particles(delta)
+	if _tutorial_pause_active:
+		_step_tutorial_pause(delta)
+		_update_ball_visual()
+		_update_paddle_visual()
+		_update_camera(delta)
+		_update_hud()
+		return
 	_step_powerups(delta)
 	if _pending_transition:
 		_step_transition(delta)
@@ -200,9 +216,6 @@ func _step_paddle(delta: float) -> void:
 	var angular_velocity: float = 0.0
 	if rot_input != null and rot_input.has_method("get_angular_velocity"):
 		angular_velocity = float(rot_input.get_angular_velocity())
-	if _tutorial_enabled and not _tutorial_rotate_seen and absf(angular_velocity) > 0.08:
-		_tutorial_rotate_seen = true
-		_show_message("ROTATE THE STABILIZER", 1.15)
 	_paddle_theta = TunnelMath.wrap_angle(_paddle_theta + angular_velocity * delta)
 
 func _step_ball(delta: float) -> void:
@@ -237,7 +250,12 @@ func _step_ball(delta: float) -> void:
 			_combo_timeout = 0.0
 			if _tutorial_enabled and not _tutorial_catch_seen:
 				_tutorial_catch_seen = true
-				_show_message("CATCH THE PULSE", 1.15)
+				_show_tutorial_pause(
+					"Catch the Pulse",
+					"The pulse stays alive only when it rebounds off the stabilizer. Miss below the paddle and the signal drops.",
+					"pulse",
+					"continue"
+				)
 		else:
 			_lose_run()
 			return
@@ -272,7 +290,12 @@ func _check_brick_hits() -> void:
 		_register_combo_hit()
 		if _tutorial_enabled and not _tutorial_fragment_seen:
 			_tutorial_fragment_seen = true
-			_show_message("BREAK SIGNAL FRAGMENTS", 1.2)
+			_show_tutorial_pause(
+				"Break Signal Fragments",
+				"Every fragment you break raises signal charge. Clear the cluster to dive deeper into the tunnel.",
+				"fragments",
+				"continue"
+			)
 
 		if destroyed:
 			_maybe_spawn_powerup(brick)
@@ -341,7 +364,7 @@ func _load_level(level_index: int) -> void:
 	_transition_mode = ""
 	_transition_time = 0.0
 	_paddle_flash_timer = 0.0
-	_tutorial_enabled = _level_index == 1
+	_tutorial_enabled = _level_index == 1 and RunManager.tutorial_requested and not SaveStore.tutorial_prompts_disabled
 	_tutorial_rotate_seen = false
 	_tutorial_catch_seen = false
 	_tutorial_fragment_seen = false
@@ -375,7 +398,12 @@ func _load_level(level_index: int) -> void:
 	_update_paddle_visual()
 	_update_camera(0.0, true)
 	if _tutorial_enabled:
-		_show_message("ROTATE THE STABILIZER", 1.4)
+		_show_tutorial_pause(
+			"Rotate the Stabilizer",
+			"Drag or tilt to rotate the glowing stabilizer around the tunnel. Move it now to let the pulse launch.",
+			"stabilizer",
+			"input"
+		)
 	else:
 		_show_message("DEPTH %d - %s" % [_level_index, "OVERDRIVE" if _run_style == STYLE_OVERDRIVE else "STABILITY"], 1.0)
 
@@ -601,11 +629,7 @@ func _maybe_spawn_powerup(brick: Node) -> void:
 		"node": node,
 		"age": 0.0
 	})
-	if _tutorial_enabled and not _tutorial_powerup_seen:
-		_tutorial_powerup_seen = true
-		_show_message("POWER MODULES DRIFT TO THE STABILIZER", 1.25)
-	else:
-		_show_message("%s MODULE" % power_type, 0.55)
+	_show_message("%s MODULE" % power_type, 0.55)
 
 func _pick_powerup_type() -> String:
 	var roll := randf()
@@ -672,6 +696,14 @@ func _collect_powerup(power_type: String, origin: Vector3) -> void:
 	_flash_paddle()
 	_start_camera_shake(0.075, 0.18)
 	_pulse_haptic(46, 0.85)
+	if _tutorial_enabled and not _tutorial_powerup_seen:
+		_tutorial_powerup_seen = true
+		_show_tutorial_pause(
+			"%s Signal Module" % power_type.capitalize(),
+			powerup_tutorial_text(power_type),
+			"powerup",
+			"continue"
+		)
 
 func _step_powerup_timers(delta: float) -> void:
 	_wide_timer = maxf(_wide_timer - delta, 0.0)
@@ -750,6 +782,14 @@ func _update_paddle_visual() -> void:
 			var mesh: BoxMesh = segment.mesh as BoxMesh
 			var arc_len: float = max((current_width / float(PADDLE_SEGMENT_COUNT)) * _play_radius * PADDLE_VISUAL_ARC_SCALE, 0.18)
 			mesh.size = Vector3(arc_len, 0.55, 0.22)
+		if i < _paddle_materials.size():
+			var material := _paddle_materials[i]
+			var base_energy := 0.85
+			if _paddle_flash_timer > 0.0:
+				base_energy = 2.2
+			if _tutorial_focus == "stabilizer":
+				base_energy = 3.5 + 0.9 * sin(_visual_time * 9.0)
+			material.emission_energy_multiplier = base_energy
 
 func _paddle_collision_width() -> float:
 	var current_width := _effective_paddle_width()
@@ -1002,6 +1042,62 @@ func _apply_hud_style() -> void:
 	message_label.add_theme_font_size_override("font_size", 28)
 	message_label.text_overrun_behavior = TextServer.OVERRUN_TRIM_ELLIPSIS
 
+func _build_tutorial_overlay() -> void:
+	_tutorial_overlay = PanelContainer.new()
+	_tutorial_overlay.name = "TutorialPauseOverlay"
+	_tutorial_overlay.visible = false
+	_tutorial_overlay.mouse_filter = Control.MOUSE_FILTER_STOP
+	_apply_control_rect(_tutorial_overlay, Rect2(Vector2(0, 0), Vector2(360, 220)))
+	var panel_style := StyleBoxFlat.new()
+	panel_style.bg_color = Color(0.015, 0.0, 0.052, 0.92)
+	panel_style.border_width_left = 2
+	panel_style.border_width_top = 2
+	panel_style.border_width_right = 2
+	panel_style.border_width_bottom = 2
+	panel_style.border_color = Color(1.0, 0.84, 0.18, 0.82)
+	panel_style.corner_radius_top_left = 22
+	panel_style.corner_radius_top_right = 22
+	panel_style.corner_radius_bottom_right = 22
+	panel_style.corner_radius_bottom_left = 22
+	panel_style.shadow_size = 22
+	panel_style.shadow_color = Color(1.0, 0.1, 0.9, 0.28)
+	panel_style.content_margin_left = 18.0
+	panel_style.content_margin_top = 16.0
+	panel_style.content_margin_right = 18.0
+	panel_style.content_margin_bottom = 16.0
+	_tutorial_overlay.add_theme_stylebox_override("panel", panel_style)
+
+	var box := VBoxContainer.new()
+	box.add_theme_constant_override("separation", 10)
+	_tutorial_overlay.add_child(box)
+
+	_tutorial_title_label = Label.new()
+	_tutorial_title_label.add_theme_font_size_override("font_size", 24)
+	_tutorial_title_label.add_theme_color_override("font_color", Color(1.0, 0.88, 0.26))
+	_tutorial_title_label.text_overrun_behavior = TextServer.OVERRUN_TRIM_ELLIPSIS
+	box.add_child(_tutorial_title_label)
+
+	_tutorial_body_label = Label.new()
+	_tutorial_body_label.add_theme_font_size_override("font_size", 15)
+	_tutorial_body_label.add_theme_color_override("font_color", Color(0.82, 1.0, 0.98))
+	_tutorial_body_label.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
+	box.add_child(_tutorial_body_label)
+
+	_tutorial_disable_check = CheckBox.new()
+	_tutorial_disable_check.text = "Do not show again"
+	_tutorial_disable_check.add_theme_font_size_override("font_size", 14)
+	_tutorial_disable_check.add_theme_color_override("font_color", Color(0.9, 0.94, 1.0, 0.88))
+	box.add_child(_tutorial_disable_check)
+
+	_tutorial_continue_button = Button.new()
+	_tutorial_continue_button.text = "CONTINUE"
+	_tutorial_continue_button.custom_minimum_size = Vector2(220, 46)
+	_tutorial_continue_button.add_theme_font_size_override("font_size", 18)
+	_tutorial_continue_button.pressed.connect(_on_tutorial_continue_pressed)
+	box.add_child(_tutorial_continue_button)
+	$HUD.add_child(_tutorial_overlay)
+	_layout_tutorial_overlay()
+
 func _layout_hud() -> void:
 	var viewport_size: Vector2 = get_viewport().get_visible_rect().size
 	if hud_panel != null:
@@ -1010,6 +1106,18 @@ func _layout_hud() -> void:
 		hud_panel.custom_minimum_size = dock_rect.size
 	if message_label != null:
 		_apply_control_rect(message_label, hud_message_rect_for_viewport(viewport_size))
+	_layout_tutorial_overlay()
+
+func _layout_tutorial_overlay() -> void:
+	if _tutorial_overlay == null:
+		return
+	var viewport_size: Vector2 = get_viewport().get_visible_rect().size
+	var dock_rect := hud_dock_rect_for_viewport(viewport_size)
+	var width: float = clampf(viewport_size.x - HUD_DOCK_SAFE_MARGIN * 2.0, 320.0, 520.0)
+	var height: float = 224.0
+	var x: float = (viewport_size.x - width) * 0.5
+	var y: float = maxf(HUD_DOCK_SAFE_MARGIN, dock_rect.position.y - height - 28.0)
+	_apply_control_rect(_tutorial_overlay, Rect2(Vector2(x, y), Vector2(width, height)))
 
 static func hud_dock_rect_for_viewport(viewport_size: Vector2) -> Rect2:
 	var width: float = clampf(viewport_size.x - HUD_DOCK_SAFE_MARGIN * 2.0, HUD_DOCK_MIN_WIDTH, HUD_DOCK_MAX_WIDTH)
@@ -1074,6 +1182,50 @@ func _apply_control_rect(control: Control, rect: Rect2) -> void:
 	control.offset_top = rect.position.y
 	control.offset_right = rect.position.x + rect.size.x
 	control.offset_bottom = rect.position.y + rect.size.y
+
+func _show_tutorial_pause(title: String, body: String, focus: String, pause_kind: String) -> void:
+	if not _tutorial_enabled:
+		return
+	_tutorial_pause_active = true
+	_tutorial_pause_kind = pause_kind
+	_tutorial_focus = focus
+	_message_serial += 1
+	if message_label != null:
+		message_label.visible = false
+	if _tutorial_overlay != null:
+		_tutorial_title_label.text = title.to_upper()
+		_tutorial_body_label.text = body
+		_tutorial_disable_check.button_pressed = false
+		_tutorial_continue_button.text = "MOVE STABILIZER" if pause_kind == "input" else "CONTINUE"
+		_tutorial_overlay.visible = true
+		_layout_tutorial_overlay()
+
+func _step_tutorial_pause(_delta: float) -> void:
+	if _tutorial_pause_kind != "input":
+		return
+	var angular_velocity: float = 0.0
+	if rot_input != null and rot_input.has_method("get_angular_velocity"):
+		angular_velocity = float(rot_input.get_angular_velocity())
+	if absf(angular_velocity) > 0.08:
+		_tutorial_rotate_seen = true
+		_paddle_theta = TunnelMath.wrap_angle(_paddle_theta + angular_velocity * 0.016)
+		_dismiss_tutorial_pause()
+
+func _on_tutorial_continue_pressed() -> void:
+	if _tutorial_pause_kind == "input":
+		_tutorial_rotate_seen = true
+	_dismiss_tutorial_pause()
+
+func _dismiss_tutorial_pause() -> void:
+	if _tutorial_disable_check != null and _tutorial_disable_check.button_pressed:
+		SaveStore.set_tutorial_prompts_disabled(true)
+		RunManager.tutorial_requested = false
+		_tutorial_enabled = false
+	_tutorial_pause_active = false
+	_tutorial_pause_kind = ""
+	_tutorial_focus = ""
+	if _tutorial_overlay != null:
+		_tutorial_overlay.visible = false
 
 func _build_fractal_overlay() -> void:
 	if FRACTAL_SHADERS.is_empty():
@@ -1232,3 +1384,14 @@ static func hud_pressure_text(score: int, rival_target: int) -> String:
 
 static func hud_pulse_text(chain_combo: int) -> String:
 	return "PULSE x%d" % max(chain_combo, 0)
+
+static func powerup_tutorial_text(power_type: String) -> String:
+	match power_type:
+		POWERUP_WIDE:
+			return "Wide modules stretch the stabilizer, giving you more room to catch the pulse for a few seconds."
+		POWERUP_SLOW:
+			return "Slow modules calm the pulse, reducing tunnel speed so you can recover under pressure."
+		POWERUP_BLAST:
+			return "Prism blast modules shatter nearby signal fragments and push your charge upward."
+		_:
+			return "Signal modules change the run temporarily. Catch them with the stabilizer before they drift away."

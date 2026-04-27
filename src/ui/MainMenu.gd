@@ -63,8 +63,8 @@ func _on_overdrive_button_pressed() -> void:
 	RunManager.start_new_run("overdrive")
 
 func _on_tutorial_button_pressed() -> void:
-	RunManager.set_run_style("stability")
-	RunManager.start_new_run("stability")
+	SaveStore.set_tutorial_prompts_disabled(false)
+	RunManager.start_tutorial_run()
 
 func _on_quit_button_pressed() -> void:
 	get_tree().quit()
