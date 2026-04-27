@@ -12,6 +12,7 @@ const FRACTAL_SHADERS: Array[Shader] = [
 	preload("res://src/shaders/fractals/julia_set.gdshader")
 ]
 const SIGNAL_GATE_SHADER: Shader = preload("res://src/shaders/signal_gate.gdshader")
+const MANDELBROT_PORTAL_SHADER: Shader = preload("res://src/shaders/fractals/mandelbrot_portal.gdshader")
 const TUNNEL_FRACTAL_SHADER: Shader = preload("res://src/shaders/fractals/tunnel_fractal_wrap.gdshader")
 const TUNNEL_FORWARD: Vector3 = Vector3(0.0, 0.0, 1.0)
 const BALL_THETA_RADIUS: float = 0.12
@@ -127,6 +128,8 @@ var _wide_timer: float = 0.0
 var _slow_timer: float = 0.0
 var _portal_cap: MeshInstance3D
 var _portal_material: ShaderMaterial
+var _portal_fractal_cap: MeshInstance3D
+var _portal_fractal_material: ShaderMaterial
 var _portal_phase: float = 0.0
 var _portal_animation_speed: float = PORTAL_BASE_ANIMATION_SPEED
 var _signal_gate_hit_timer: float = 0.0
@@ -453,12 +456,25 @@ func _refresh_tunnel_visual() -> void:
 	_position_tunnel_end_portal()
 
 func _build_tunnel_end_portal() -> void:
+	_portal_fractal_cap = MeshInstance3D.new()
+	_portal_fractal_cap.name = "MandelbrotTunnelEnd"
+	_portal_fractal_cap.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
+	_portal_fractal_material = ShaderMaterial.new()
+	_portal_fractal_material.shader = MANDELBROT_PORTAL_SHADER
+	_portal_fractal_material.set_shader_parameter("alpha", 0.66)
+	_portal_fractal_material.set_shader_parameter("zoom", 2.5)
+	_portal_fractal_material.set_shader_parameter("drift", 0.5)
+	_portal_fractal_material.set_shader_parameter("portal_phase", _portal_phase)
+	_portal_fractal_material.set_shader_parameter("recursion_limit", 132)
+	_portal_fractal_cap.material_override = _portal_fractal_material
+	$World.add_child(_portal_fractal_cap)
+
 	_portal_cap = MeshInstance3D.new()
 	_portal_cap.name = "SignalGate"
 	_portal_cap.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
 	_portal_material = ShaderMaterial.new()
 	_portal_material.shader = SIGNAL_GATE_SHADER
-	_portal_material.set_shader_parameter("alpha", 0.58)
+	_portal_material.set_shader_parameter("alpha", 0.36)
 	_portal_material.set_shader_parameter("gate_time", _portal_phase)
 	_portal_material.set_shader_parameter("hit_strength", 0.0)
 	_portal_material.set_shader_parameter("break_progress", 0.0)
@@ -469,10 +485,14 @@ func _build_tunnel_end_portal() -> void:
 	_position_tunnel_end_portal()
 
 func _position_tunnel_end_portal() -> void:
-	if _portal_cap == null:
+	if _portal_cap == null or _portal_fractal_cap == null:
 		return
 	var portal_radius: float = _play_radius + PADDLE_SURFACE_INSET + 0.12
-	_portal_cap.mesh = _build_disc_mesh(portal_radius, 96)
+	var portal_mesh := _build_disc_mesh(portal_radius, 128)
+	_portal_fractal_cap.mesh = portal_mesh
+	_portal_fractal_cap.position = Vector3(0.0, 0.0, _level_end_z + 0.06)
+	_portal_fractal_cap.rotation = Vector3.ZERO
+	_portal_cap.mesh = portal_mesh
 	_portal_cap.position = Vector3(0.0, 0.0, _level_end_z)
 	_portal_cap.rotation = Vector3.ZERO
 	_reset_signal_gate_shards()
@@ -1083,10 +1103,13 @@ func _update_psychedelic_materials() -> void:
 		material.emission = Color.from_hsv(hue, 0.96, 1.0)
 		var flash_boost := 1.45 * (_paddle_flash_timer / PADDLE_FLASH_DURATION) if _paddle_flash_timer > 0.0 else 0.0
 		material.emission_energy_multiplier = 0.65 + 0.28 * absf(sin(_visual_time * 2.4 + float(i))) + flash_boost
-	if _portal_material != null and not _pending_transition:
+	if _portal_fractal_material != null and not _pending_transition:
 		var portal_pulse := 0.5 + 0.5 * sin(_visual_time * 1.1)
-		_portal_material.set_shader_parameter("alpha", 0.50 + portal_pulse * 0.12)
-		_portal_material.set_shader_parameter("zoom", 2.55 + portal_pulse * 0.2)
+		_portal_fractal_material.set_shader_parameter("alpha", 0.58 + portal_pulse * 0.12)
+		_portal_fractal_material.set_shader_parameter("zoom", 2.45 + portal_pulse * 0.24)
+	if _portal_material != null and not _pending_transition:
+		var gate_pulse := 0.5 + 0.5 * sin(_visual_time * 2.0)
+		_portal_material.set_shader_parameter("alpha", 0.28 + gate_pulse * 0.08)
 	if key_light != null:
 		key_light.light_color = Color.from_hsv(fmod(0.81 + _visual_time * 0.035, 1.0), 0.6, 1.0)
 	if fill_light != null:
@@ -1266,16 +1289,19 @@ func _break_signal_gate() -> void:
 	_spawn_ball_impact_burst(TunnelMath.surface_to_world(_ball_theta, _level_end_z, _play_radius), Color(1.0, 0.28, 0.92), 1.7)
 
 func _step_portal_motion(delta: float) -> void:
-	if _portal_material == null:
+	if _portal_material == null and _portal_fractal_material == null:
 		return
 	var target_speed := portal_animation_speed_for_ball_velocity(_ball_v_z, _ball_v_theta)
 	if _pending_transition and _transition_mode == "portal_breach":
 		target_speed = PORTAL_MAX_ANIMATION_SPEED
 	_portal_animation_speed = smoothed_portal_animation_speed(_portal_animation_speed, target_speed, delta)
 	_portal_phase = fmod(_portal_phase + delta * _portal_animation_speed, 10000.0)
-	_portal_material.set_shader_parameter("gate_time", _portal_phase)
-	_portal_material.set_shader_parameter("hit_strength", signal_gate_hit_strength(_signal_gate_hit_timer))
-	_portal_material.set_shader_parameter("break_progress", _signal_gate_break_progress)
+	if _portal_material != null:
+		_portal_material.set_shader_parameter("gate_time", _portal_phase)
+		_portal_material.set_shader_parameter("hit_strength", signal_gate_hit_strength(_signal_gate_hit_timer))
+		_portal_material.set_shader_parameter("break_progress", _signal_gate_break_progress)
+	if _portal_fractal_material != null:
+		_portal_fractal_material.set_shader_parameter("portal_phase", _portal_phase)
 
 func _step_tunnel_texture_motion(delta: float) -> void:
 	if _tunnel_material == null:
@@ -1436,9 +1462,13 @@ func _step_transition(delta: float) -> void:
 		_ball_theta = TunnelMath.wrap_angle(_ball_theta + delta * (1.6 + t * 5.0))
 		if _portal_material != null:
 			_signal_gate_break_progress = t
-			_portal_material.set_shader_parameter("alpha", lerpf(0.58, 0.08, t))
+			_portal_material.set_shader_parameter("alpha", lerpf(0.36, 0.06, t))
 			_portal_material.set_shader_parameter("break_progress", _signal_gate_break_progress)
 			_step_signal_gate_shards(_signal_gate_break_progress)
+		if _portal_fractal_material != null:
+			_portal_fractal_material.set_shader_parameter("alpha", lerpf(0.70, 1.0, t))
+			_portal_fractal_material.set_shader_parameter("zoom", lerpf(2.45, 1.3, t))
+			_portal_fractal_material.set_shader_parameter("drift", lerpf(0.5, 1.15, t))
 		if _fractal_overlay_material != null:
 			_fractal_overlay_material.set_shader_parameter("alpha", lerpf(0.045, 0.16, t))
 	elif _transition_mode == "lost":

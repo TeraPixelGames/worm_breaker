@@ -1,7 +1,7 @@
 /*
 Transparent signal gate boundary for Worm Breaker.
 Electric current pattern adapted from "Procedural Electric Current Shader"
-by nonunknown, MIT License.
+by arlez80, MIT License.
 Source: https://godotshaders.com/shader/procedural-electric-current-shader/
 */
 shader_type spatial;
@@ -41,35 +41,51 @@ float fbm(vec2 uv) {
 	return value;
 }
 
+float electric_thread(vec2 uv, float phase, float offset) {
+	vec2 sample_uv = uv * vec2(1.4, 2.8);
+	sample_uv.y += phase * 4.8 + offset;
+	float current_noise = noise(sample_uv * 5.0);
+	float current = cos((uv.x + current_noise * 0.92 + sin(phase * 1.3 + offset) * 0.18) * 24.0);
+	return smoothstep(0.64, 1.0, current);
+}
+
 void fragment() {
 	vec2 uv = (UV - 0.5) * 2.0;
 	float radius = length(uv);
 	float disc = smoothstep(1.02, 0.86, radius);
-	float transparent_core = smoothstep(0.0, 0.72, radius);
+	float transparent_core = smoothstep(0.04, 0.78, radius);
 	float rim = smoothstep(1.0, 0.92, radius) - smoothstep(0.86, 0.72, radius);
 
 	float angle = atan(uv.y, uv.x);
-	float radial = radius * 7.5;
-	vec2 flow_uv = vec2(angle * 2.25 + gate_time * 1.8, radial - gate_time * 3.2);
-	float current = fbm(flow_uv * 1.8);
-	float branch = abs(sin(angle * 9.0 + current * 8.0 + gate_time * 7.0));
-	float electric = smoothstep(0.73, 0.98, current) * smoothstep(0.62, 0.96, branch);
+	float impact_age = 1.0 - hit_strength;
+	vec2 angular_uv = vec2(angle / 6.2831853, radius);
+	float primary_current = electric_thread(angular_uv, gate_time * 3.2, 0.0);
+	float counter_current = electric_thread(vec2(-angular_uv.x, angular_uv.y * 1.18), gate_time * 2.6, 4.7);
+	float radial_noise = fbm(vec2(angle * 2.4, radius * 8.5 - gate_time * 5.0));
+	float branching = smoothstep(0.68, 0.98, abs(sin(angle * 11.0 + radius * 13.0 + radial_noise * 7.0 + gate_time * 10.0)));
+	float collision_current = max(primary_current, counter_current * 0.8) * branching;
+	collision_current *= smoothstep(0.98, 0.28, radius) * smoothstep(0.07, 0.26, radius);
+	collision_current *= hit_strength;
 
-	float hit_ring = smoothstep(0.16 + hit_strength * 0.7, 0.10 + hit_strength * 0.7, abs(radius - hit_strength));
+	float shock_radius = mix(0.16, 0.88, impact_age);
+	float shock_ring = smoothstep(0.075, 0.0, abs(radius - shock_radius)) * hit_strength;
+	float fork_line = smoothstep(0.985 - hit_strength * 0.22, 1.0, abs(sin(angle * 6.0 + radial_noise * 8.0 + gate_time * 18.0))) * hit_strength;
+	float electric = max(collision_current, max(shock_ring, fork_line * smoothstep(0.22, 0.96, radius)));
+
 	float crack_noise = fbm(uv * 8.0 + gate_time);
 	float crack = smoothstep(0.84 - break_progress * 0.38, 0.96, crack_noise + break_progress * 0.55);
 	float break_holes = smoothstep(0.42, 0.9, break_progress) * smoothstep(0.55, 0.98, crack_noise);
 
-	vec3 color = gate_color.rgb * (0.06 + rim * 0.9 + electric * 1.45);
-	color += hit_color.rgb * hit_ring * (0.45 + hit_strength * 1.8);
+	vec3 color = gate_color.rgb * (0.03 + rim * 0.7 + electric * 1.7);
+	color += hit_color.rgb * (shock_ring + collision_current) * (1.15 + hit_strength * 2.8);
 	color += break_color.rgb * crack * break_progress * 1.8;
 
-	float membrane = alpha * 0.20 * transparent_core;
-	float visibility = disc * (membrane + rim * alpha * 0.62 + electric * 0.24 + hit_ring * 0.38 + break_progress * 0.24);
+	float membrane = alpha * 0.08 * transparent_core;
+	float visibility = disc * (membrane + rim * alpha * 0.52 + electric * 0.92 + break_progress * 0.24);
 	visibility *= 1.0 - break_holes * 0.9;
 	visibility *= 1.0 - smoothstep(0.82, 1.0, break_progress) * 0.75;
 
 	ALBEDO = color;
-	EMISSION = color * (1.15 + hit_strength * 2.4 + break_progress * 1.8);
+	EMISSION = color * (1.15 + electric * 4.8 + hit_strength * 1.8 + break_progress * 1.8);
 	ALPHA = clamp(visibility, 0.0, 1.0);
 }
