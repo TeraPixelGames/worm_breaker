@@ -39,6 +39,7 @@ const POWERUP_SLOW_DURATION: float = 5.0
 const POWERUP_SLOW_MIN_Z_SPEED: float = 5.4
 const PORTAL_BREACH_DURATION: float = 1.18
 const SIGNAL_GATE_HIT_DURATION: float = 0.62
+const SIGNAL_GATE_SHARD_COUNT: int = 18
 const PADDLE_FLASH_DURATION: float = 0.18
 const HUD_DOCK_SAFE_MARGIN: float = 24.0
 const HUD_DOCK_MIN_WIDTH: float = 292.0
@@ -130,6 +131,7 @@ var _portal_phase: float = 0.0
 var _portal_animation_speed: float = PORTAL_BASE_ANIMATION_SPEED
 var _signal_gate_hit_timer: float = 0.0
 var _signal_gate_break_progress: float = 0.0
+var _signal_gate_shards: Array[Dictionary] = []
 var _fractal_layer: CanvasLayer
 var _fractal_overlay: ColorRect
 var _fractal_overlay_material: ShaderMaterial
@@ -369,6 +371,8 @@ func _load_level(level_index: int) -> void:
 	_transition_mode = ""
 	_transition_time = 0.0
 	_paddle_flash_timer = 0.0
+	_signal_gate_hit_timer = 0.0
+	_signal_gate_break_progress = 0.0
 	_tutorial_enabled = _level_index == 1 and RunManager.tutorial_requested and not SaveStore.tutorial_prompts_disabled
 	_tutorial_rotate_seen = false
 	_tutorial_catch_seen = false
@@ -461,6 +465,7 @@ func _build_tunnel_end_portal() -> void:
 	_portal_animation_speed = portal_animation_speed_for_ball_velocity(_ball_v_z, _ball_v_theta)
 	_portal_cap.material_override = _portal_material
 	$World.add_child(_portal_cap)
+	_build_signal_gate_shards()
 	_position_tunnel_end_portal()
 
 func _position_tunnel_end_portal() -> void:
@@ -470,6 +475,95 @@ func _position_tunnel_end_portal() -> void:
 	_portal_cap.mesh = _build_disc_mesh(portal_radius, 96)
 	_portal_cap.position = Vector3(0.0, 0.0, _level_end_z)
 	_portal_cap.rotation = Vector3.ZERO
+	_reset_signal_gate_shards()
+
+func _build_signal_gate_shards() -> void:
+	for shard in _signal_gate_shards:
+		var node: MeshInstance3D = shard.get("node")
+		if node != null and is_instance_valid(node):
+			node.queue_free()
+	_signal_gate_shards.clear()
+
+	for i in range(SIGNAL_GATE_SHARD_COUNT):
+		var shard := MeshInstance3D.new()
+		shard.name = "SignalGateShard%d" % i
+		shard.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
+		shard.mesh = _build_signal_gate_shard_mesh(i, SIGNAL_GATE_SHARD_COUNT, _play_radius + PADDLE_SURFACE_INSET + 0.12)
+
+		var material := StandardMaterial3D.new()
+		material.transparency = BaseMaterial3D.TRANSPARENCY_ALPHA
+		material.blend_mode = BaseMaterial3D.BLEND_MODE_ADD
+		material.no_depth_test = true
+		material.shading_mode = BaseMaterial3D.SHADING_MODE_UNSHADED
+		material.albedo_color = Color(0.2, 1.0, 0.94, 0.0)
+		material.emission_enabled = true
+		material.emission = Color(0.2, 1.0, 0.94)
+		material.emission_energy_multiplier = 1.7
+		shard.material_override = material
+		shard.visible = false
+		$World.add_child(shard)
+
+		var angle := (TAU * (float(i) + 0.5)) / float(SIGNAL_GATE_SHARD_COUNT)
+		_signal_gate_shards.append({
+			"node": shard,
+			"material": material,
+			"direction": Vector2(cos(angle), sin(angle)),
+			"spin": (-1.0 if i % 2 == 0 else 1.0) * (1.6 + float(i % 5) * 0.35),
+			"travel": 1.4 + float(i % 4) * 0.38
+		})
+
+func _build_signal_gate_shard_mesh(index: int, count: int, radius: float) -> ArrayMesh:
+	var start_angle := TAU * float(index) / float(count)
+	var end_angle := TAU * float(index + 1) / float(count)
+	var middle_angle := (start_angle + end_angle) * 0.5
+	var inner_radius := radius * (0.18 + 0.10 * float(index % 3))
+	var mid_radius := radius * (0.62 + 0.08 * float(index % 2))
+
+	var vertices := PackedVector3Array([
+		Vector3(cos(start_angle) * inner_radius, sin(start_angle) * inner_radius, 0.0),
+		Vector3(cos(middle_angle) * radius, sin(middle_angle) * radius, 0.0),
+		Vector3(cos(end_angle) * mid_radius, sin(end_angle) * mid_radius, 0.0)
+	])
+	var uvs := PackedVector2Array()
+	for vertex in vertices:
+		uvs.append(Vector2(vertex.x / (radius * 2.0) + 0.5, vertex.y / (radius * 2.0) + 0.5))
+	var arrays: Array = []
+	arrays.resize(Mesh.ARRAY_MAX)
+	arrays[Mesh.ARRAY_VERTEX] = vertices
+	arrays[Mesh.ARRAY_TEX_UV] = uvs
+	arrays[Mesh.ARRAY_INDEX] = PackedInt32Array([0, 1, 2])
+	var mesh := ArrayMesh.new()
+	mesh.add_surface_from_arrays(Mesh.PRIMITIVE_TRIANGLES, arrays)
+	return mesh
+
+func _reset_signal_gate_shards() -> void:
+	for shard in _signal_gate_shards:
+		var node: MeshInstance3D = shard.get("node")
+		var material: StandardMaterial3D = shard.get("material")
+		if node == null or not is_instance_valid(node):
+			continue
+		node.visible = false
+		node.position = Vector3(0.0, 0.0, _level_end_z + 0.03)
+		node.rotation = Vector3.ZERO
+		node.scale = Vector3.ONE
+		if material != null:
+			material.albedo_color = Color(0.2, 1.0, 0.94, 0.0)
+
+func _step_signal_gate_shards(progress: float) -> void:
+	for shard in _signal_gate_shards:
+		var node: MeshInstance3D = shard.get("node")
+		var material: StandardMaterial3D = shard.get("material")
+		if node == null or not is_instance_valid(node):
+			continue
+		var direction: Vector2 = shard.get("direction", Vector2.RIGHT)
+		var travel: float = float(shard.get("travel", 1.5)) * progress * progress
+		node.visible = progress > 0.02 and progress < 0.98
+		node.position = Vector3(direction.x * travel, direction.y * travel, _level_end_z + 0.04 + progress * 2.8)
+		node.rotation = Vector3(progress * 0.9, progress * 0.55, progress * float(shard.get("spin", 1.5)))
+		node.scale = Vector3.ONE * (1.0 + progress * 0.28)
+		if material != null:
+			var alpha := clampf((1.0 - progress) * 0.72, 0.0, 0.72)
+			material.albedo_color = Color(0.28 + progress * 0.72, 1.0 - progress * 0.35, 0.96, alpha)
 
 func _build_disc_mesh(radius: float, segments: int) -> ArrayMesh:
 	var vertices := PackedVector3Array()
@@ -1168,6 +1262,7 @@ func _hit_signal_gate() -> void:
 func _break_signal_gate() -> void:
 	_signal_gate_hit_timer = SIGNAL_GATE_HIT_DURATION
 	_signal_gate_break_progress = 0.01
+	_step_signal_gate_shards(_signal_gate_break_progress)
 	_spawn_ball_impact_burst(TunnelMath.surface_to_world(_ball_theta, _level_end_z, _play_radius), Color(1.0, 0.28, 0.92), 1.7)
 
 func _step_portal_motion(delta: float) -> void:
@@ -1343,6 +1438,7 @@ func _step_transition(delta: float) -> void:
 			_signal_gate_break_progress = t
 			_portal_material.set_shader_parameter("alpha", lerpf(0.58, 0.08, t))
 			_portal_material.set_shader_parameter("break_progress", _signal_gate_break_progress)
+			_step_signal_gate_shards(_signal_gate_break_progress)
 		if _fractal_overlay_material != null:
 			_fractal_overlay_material.set_shader_parameter("alpha", lerpf(0.045, 0.16, t))
 	elif _transition_mode == "lost":

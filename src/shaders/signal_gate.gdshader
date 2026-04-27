@@ -45,6 +45,7 @@ void fragment() {
 	vec2 uv = (UV - 0.5) * 2.0;
 	float radius = length(uv);
 	float disc = smoothstep(1.02, 0.86, radius);
+	float transparent_core = smoothstep(0.0, 0.72, radius);
 	float rim = smoothstep(1.0, 0.92, radius) - smoothstep(0.86, 0.72, radius);
 
 	float angle = atan(uv.y, uv.x);
@@ -59,11 +60,12 @@ void fragment() {
 	float crack = smoothstep(0.84 - break_progress * 0.38, 0.96, crack_noise + break_progress * 0.55);
 	float break_holes = smoothstep(0.42, 0.9, break_progress) * smoothstep(0.55, 0.98, crack_noise);
 
-	vec3 color = gate_color.rgb * (0.16 + rim * 0.9 + electric * 1.45);
+	vec3 color = gate_color.rgb * (0.06 + rim * 0.9 + electric * 1.45);
 	color += hit_color.rgb * hit_ring * (0.45 + hit_strength * 1.8);
 	color += break_color.rgb * crack * break_progress * 1.8;
 
-	float visibility = disc * (alpha + electric * 0.26 + hit_ring * 0.38 + break_progress * 0.24);
+	float membrane = alpha * 0.20 * transparent_core;
+	float visibility = disc * (membrane + rim * alpha * 0.62 + electric * 0.24 + hit_ring * 0.38 + break_progress * 0.24);
 	visibility *= 1.0 - break_holes * 0.9;
 	visibility *= 1.0 - smoothstep(0.82, 1.0, break_progress) * 0.75;
 
