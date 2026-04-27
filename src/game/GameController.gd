@@ -135,7 +135,7 @@ var _tutorial_enabled: bool = false
 var _tutorial_rotate_seen: bool = false
 var _tutorial_catch_seen: bool = false
 var _tutorial_fragment_seen: bool = false
-var _tutorial_powerup_seen: bool = false
+var _tutorial_powerups_seen: Dictionary = {}
 var _tutorial_pause_active: bool = false
 var _tutorial_pause_kind: String = ""
 var _tutorial_focus: String = ""
@@ -368,7 +368,7 @@ func _load_level(level_index: int) -> void:
 	_tutorial_rotate_seen = false
 	_tutorial_catch_seen = false
 	_tutorial_fragment_seen = false
-	_tutorial_powerup_seen = false
+	_tutorial_powerups_seen.clear()
 
 	if _run_style == STYLE_OVERDRIVE:
 		_ball_v_theta *= 1.20
@@ -696,10 +696,10 @@ func _collect_powerup(power_type: String, origin: Vector3) -> void:
 	_flash_paddle()
 	_start_camera_shake(0.075, 0.18)
 	_pulse_haptic(46, 0.85)
-	if _tutorial_enabled and not _tutorial_powerup_seen:
-		_tutorial_powerup_seen = true
+	if _tutorial_enabled and not _tutorial_powerups_seen.has(power_type):
+		_tutorial_powerups_seen[power_type] = true
 		_show_tutorial_pause(
-			"%s Signal Module" % power_type.capitalize(),
+			"%s Signal Module" % powerup_display_name(power_type),
 			powerup_tutorial_text(power_type),
 			"powerup",
 			"continue"
@@ -1395,3 +1395,14 @@ static func powerup_tutorial_text(power_type: String) -> String:
 			return "Prism blast modules shatter nearby signal fragments and push your charge upward."
 		_:
 			return "Signal modules change the run temporarily. Catch them with the stabilizer before they drift away."
+
+static func powerup_display_name(power_type: String) -> String:
+	match power_type:
+		POWERUP_WIDE:
+			return "Wide"
+		POWERUP_SLOW:
+			return "Slow"
+		POWERUP_BLAST:
+			return "Prism Blast"
+		_:
+			return power_type.capitalize()
