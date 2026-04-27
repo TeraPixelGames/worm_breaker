@@ -25,3 +25,7 @@ func test_powerup_tutorial_display_names_are_player_facing() -> void:
 	assert_equal(GameController.powerup_display_name("WIDE"), "Wide", "Wide module title should be readable")
 	assert_equal(GameController.powerup_display_name("SLOW"), "Slow", "Slow module title should be readable")
 	assert_equal(GameController.powerup_display_name("BLAST"), "Prism Blast", "Blast module title should use the in-game name")
+
+func test_signal_gate_hit_strength_is_clamped() -> void:
+	assert_equal(GameController.signal_gate_hit_strength(0.0), 0.0, "Expired gate hit should not emit a pulse")
+	assert_equal(GameController.signal_gate_hit_strength(999.0), 1.0, "Fresh gate hit should clamp at full pulse strength")
