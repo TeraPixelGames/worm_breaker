@@ -1,0 +1,59 @@
+name: Tech Debt
+description: Track structural improvements that reduce risk and maintenance cost.
+title: "[Tech Debt]: "
+labels: ["tech-debt", "status:triage", "agent:cto", "sev:P2"]
+body:
+  - type: textarea
+    id: debt
+    attributes:
+      label: Debt Description
+    validations:
+      required: true
+  - type: textarea
+    id: impact
+    attributes:
+      label: Current Impact
+    validations:
+      required: true
+  - type: textarea
+    id: proposal
+    attributes:
+      label: Proposed Remediation
+    validations:
+      required: true
+  - type: dropdown
+    id: owner
+    attributes:
+      label: Owner Agent
+      options:
+        - agent:cto
+        - agent:seniordev
+        - agent:devops
+    validations:
+      required: true
+  - type: dropdown
+    id: severity
+    attributes:
+      label: Severity
+      options:
+        - sev:P2
+        - sev:P1
+        - sev:P0
+    validations:
+      required: true
+  - type: dropdown
+    id: status
+    attributes:
+      label: Initial Status
+      options:
+        - status:triage
+        - status:ready
+        - status:in-progress
+    validations:
+      required: true
+  - type: textarea
+    id: acceptance
+    attributes:
+      label: Acceptance Criteria
+    validations:
+      required: true

@@ -1,0 +1,128 @@
+name: Orchestration Handoff
+
+on:
+  issue_comment:
+    types: [created]
+
+permissions:
+  contents: read
+  issues: write
+
+jobs:
+  handoff:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Apply handoff command
+        uses: actions/github-script@60a0d83039c74a4aee543508d2ffcb1c3799cdea # v7.0.1
+        with:
+          script: |
+            const issue = context.payload.issue;
+            const comment = context.payload.comment;
+            if (!issue || !comment) return;
+
+            const actor = comment.user?.login || '';
+            if (actor.endsWith('[bot]')) return;
+
+            const association = comment.author_association || 'NONE';
+            const trusted = ['OWNER', 'MEMBER', 'COLLABORATOR'];
+            const raw = (comment.body || '').trim();
+            if (!raw.startsWith('/')) return;
+            if (!trusted.includes(association)) return;
+
+            const ownerLabels = [
+              'agent:ceo', 'agent:cto', 'agent:cfo', 'agent:cmo',
+              'agent:product', 'agent:pm', 'agent:devops',
+              'agent:seniordev', 'agent:juniordev'
+            ];
+            const statusLabels = [
+              'status:triage', 'status:ready', 'status:in-progress',
+              'status:needs-review', 'status:blocked', 'status:done'
+            ];
+
+            const handoffTargets = {
+              ceo: 'agent:ceo',
+              cto: 'agent:cto',
+              cfo: 'agent:cfo',
+              cmo: 'agent:cmo',
+              product: 'agent:product',
+              pm: 'agent:pm',
+              devops: 'agent:devops',
+              seniordev: 'agent:seniordev',
+              juniordev: 'agent:juniordev',
+              junior: 'agent:juniordev'
+            };
+
+            const setExclusive = (labels, family, selected) => {
+              const filtered = labels.filter((l) => !family.includes(l));
+              if (selected) filtered.push(selected);
+              return Array.from(new Set(filtered));
+            };
+
+            const current = (issue.labels || []).map((l) => typeof l === 'string' ? l : l.name);
+            let next = Array.from(new Set(current));
+
+            let targetOwner = null;
+            let targetStatus = null;
+            let actionText = null;
+            let blockReason = '';
+
+            const handoffMatch = raw.match(/^\/handoff\s+([a-z]+)/i);
+            if (handoffMatch) {
+              const role = handoffMatch[1].toLowerCase();
+              targetOwner = handoffTargets[role] || null;
+              if (!targetOwner) return;
+              targetStatus = 'status:ready';
+              actionText = 'handoff';
+            } else if (/^\/ready\b/i.test(raw)) {
+              targetStatus = 'status:ready';
+              actionText = 'ready';
+            } else if (/^\/start\b/i.test(raw)) {
+              targetStatus = 'status:in-progress';
+              actionText = 'start';
+            } else if (/^\/review\b/i.test(raw)) {
+              targetStatus = 'status:needs-review';
+              actionText = 'review';
+            } else if (/^\/done\b/i.test(raw)) {
+              targetStatus = 'status:done';
+              actionText = 'done';
+            } else {
+              const blockMatch = raw.match(/^\/block\s+(.+)/i);
+              if (!blockMatch) return;
+              targetStatus = 'status:blocked';
+              blockReason = blockMatch[1].trim();
+              actionText = 'block';
+            }
+
+            if (targetOwner) next = setExclusive(next, ownerLabels, targetOwner);
+            if (targetStatus) next = setExclusive(next, statusLabels, targetStatus);
+
+            const curSorted = Array.from(new Set(current)).sort();
+            const nextSorted = Array.from(new Set(next)).sort();
+            if (JSON.stringify(curSorted) !== JSON.stringify(nextSorted)) {
+              await github.rest.issues.setLabels({
+                owner: context.repo.owner,
+                repo: context.repo.repo,
+                issue_number: issue.number,
+                labels: nextSorted
+              });
+            }
+
+            const marker = '<!-- orchestration:handoff -->';
+            const lines = [
+              marker,
+              '',
+              '### Orchestration Handoff',
+              '- Command: ' + raw,
+              '- Actor: @' + actor,
+              '- Action: ' + actionText,
+              '- Owner: ' + (targetOwner || 'unchanged'),
+              '- Status: ' + (targetStatus || 'unchanged')
+            ];
+            if (blockReason) lines.push('- Block reason: ' + blockReason);
+
+            await github.rest.issues.createComment({
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              issue_number: issue.number,
+              body: lines.join('\n')
+            });

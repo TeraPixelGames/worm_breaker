@@ -1,0 +1,64 @@
+name: Revenue Anomaly
+description: Capture unexpected revenue or conversion behavior with financial impact details.
+title: "[Revenue Anomaly]: "
+labels: ["revenue-anomaly", "status:triage", "agent:cfo", "sev:P1"]
+body:
+  - type: textarea
+    id: anomaly
+    attributes:
+      label: Anomaly Description
+    validations:
+      required: true
+  - type: input
+    id: timespan
+    attributes:
+      label: Time Range (UTC)
+      placeholder: 2026-02-24 00:00 to 2026-02-24 12:00
+    validations:
+      required: true
+  - type: textarea
+    id: impact
+    attributes:
+      label: Estimated Financial Impact
+    validations:
+      required: true
+  - type: dropdown
+    id: owner
+    attributes:
+      label: Owner Agent
+      options:
+        - agent:cfo
+        - agent:cto
+        - agent:pm
+    validations:
+      required: true
+  - type: dropdown
+    id: severity
+    attributes:
+      label: Severity
+      options:
+        - sev:P0
+        - sev:P1
+        - sev:P2
+    validations:
+      required: true
+  - type: dropdown
+    id: status
+    attributes:
+      label: Initial Status
+      options:
+        - status:triage
+        - status:in-progress
+        - status:blocked
+    validations:
+      required: true
+  - type: textarea
+    id: acceptance
+    attributes:
+      label: Acceptance Criteria
+      placeholder: |
+        - Data source validated
+        - Root cause identified
+        - Preventive control added
+    validations:
+      required: true

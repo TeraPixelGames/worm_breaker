@@ -1,0 +1,59 @@
+name: Feature
+description: Define a product feature with outcomes and acceptance criteria.
+title: "[Feature]: "
+labels: ["feature", "status:triage", "agent:product", "sev:P2"]
+body:
+  - type: textarea
+    id: problem
+    attributes:
+      label: Problem Statement
+    validations:
+      required: true
+  - type: textarea
+    id: outcome
+    attributes:
+      label: Desired Outcome
+    validations:
+      required: true
+  - type: textarea
+    id: scope
+    attributes:
+      label: Scope and Non-Goals
+    validations:
+      required: true
+  - type: dropdown
+    id: owner
+    attributes:
+      label: Owner Agent
+      options:
+        - agent:product
+        - agent:pm
+        - agent:seniordev
+    validations:
+      required: true
+  - type: dropdown
+    id: severity
+    attributes:
+      label: Severity
+      options:
+        - sev:P2
+        - sev:P1
+        - sev:P0
+    validations:
+      required: true
+  - type: dropdown
+    id: status
+    attributes:
+      label: Initial Status
+      options:
+        - status:triage
+        - status:ready
+        - status:blocked
+    validations:
+      required: true
+  - type: textarea
+    id: acceptance
+    attributes:
+      label: Acceptance Criteria
+    validations:
+      required: true

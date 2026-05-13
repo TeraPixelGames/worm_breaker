@@ -1,0 +1,54 @@
+name: Codex Plan
+description: Parent planning issue created from a Codex-approved plan.
+title: "[Plan]: "
+labels: ["plan", "status:triage", "agent:pm", "sev:P2"]
+body:
+  - type: textarea
+    id: summary
+    attributes:
+      label: Summary
+      description: Describe the goal, approach, and target repo or repos.
+    validations:
+      required: true
+  - type: textarea
+    id: acceptance
+    attributes:
+      label: Acceptance Criteria
+      description: List the observable conditions that make this plan complete.
+    validations:
+      required: true
+  - type: textarea
+    id: tasks
+    attributes:
+      label: Child Tasks
+      description: Link child task issues or list the task slices to create.
+    validations:
+      required: true
+  - type: textarea
+    id: assumptions
+    attributes:
+      label: Assumptions And Non-Goals
+      description: Record important defaults, exclusions, and blocked decisions.
+    validations:
+      required: true
+  - type: dropdown
+    id: owner
+    attributes:
+      label: Owner
+      options:
+        - agent:pm
+        - agent:product
+        - agent:cto
+        - agent:seniordev
+    validations:
+      required: true
+  - type: dropdown
+    id: status
+    attributes:
+      label: Status
+      options:
+        - status:triage
+        - status:ready
+        - status:blocked
+    validations:
+      required: true

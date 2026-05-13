@@ -1,0 +1,160 @@
+name: Project Sync
+
+on:
+  issues:
+    types: [opened, reopened, edited, labeled, unlabeled, closed]
+  pull_request:
+    types: [opened, reopened, synchronize, ready_for_review, converted_to_draft, closed]
+  workflow_dispatch:
+    inputs:
+      item_url:
+        description: Issue or PR URL to add/update in the project
+        required: true
+
+permissions:
+  contents: read
+  issues: read
+  pull-requests: read
+
+jobs:
+  sync:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Add item and mirror label fields
+        uses: actions/github-script@60a0d83039c74a4aee543508d2ffcb1c3799cdea # v7.0.1
+        env:
+          PROJECT_OWNER: Terapixel-Games
+          PROJECT_NUMBER: ${{ vars.TERAPIXEL_STUDIO_PROJECT_NUMBER }}
+          ITEM_URL_INPUT: ${{ github.event.inputs.item_url || '' }}
+        with:
+          github-token: ${{ secrets.PROJECT_SYNC_TOKEN != '' && secrets.PROJECT_SYNC_TOKEN || github.token }}
+          script: |
+            const projectNumber = Number(process.env.PROJECT_NUMBER || 0);
+            if (!projectNumber) {
+              core.notice('TERAPIXEL_STUDIO_PROJECT_NUMBER is not configured; skipping project sync.');
+              return;
+            }
+
+            const ownerLogin = process.env.PROJECT_OWNER;
+            const issue = context.payload.issue;
+            const pr = context.payload.pull_request;
+            const itemUrl = process.env.ITEM_URL_INPUT || issue?.html_url || pr?.html_url;
+            const labels = (issue?.labels || pr?.labels || []).map((l) => typeof l === 'string' ? l : l.name);
+            if (!itemUrl) {
+              core.notice('No issue or PR URL available; skipping project sync.');
+              return;
+            }
+
+            const ownerQuery = await github.graphql(`
+              query($login: String!, $number: Int!) {
+                organization(login: $login) {
+                  id
+                  projectV2(number: $number) {
+                    id
+                    fields(first: 50) {
+                      nodes {
+                        ... on ProjectV2Field { id name }
+                        ... on ProjectV2SingleSelectField { id name options { id name } }
+                      }
+                    }
+                  }
+                }
+              }`,
+              { login: ownerLogin, number: projectNumber }
+            );
+
+            const org = ownerQuery.organization;
+            const project = org?.projectV2;
+            if (!project) {
+              core.warning(`Project ${ownerLogin}#${projectNumber} not found or token lacks access.`);
+              return;
+            }
+
+            const contentQuery = await github.graphql(`
+              query($url: URI!) {
+                resource(url: $url) {
+                  ... on Issue {
+                    id
+                    repository { nameWithOwner }
+                    projectItems(first: 20) { nodes { id project { id } } }
+                  }
+                  ... on PullRequest {
+                    id
+                    repository { nameWithOwner }
+                    projectItems(first: 20) { nodes { id project { id } } }
+                  }
+                }
+              }`,
+              { url: itemUrl }
+            );
+            const content = contentQuery.resource;
+            if (!content?.id) {
+              core.warning(`Could not resolve item URL: ${itemUrl}`);
+              return;
+            }
+
+            let itemId = content.projectItems?.nodes?.find((item) => item.project.id === project.id)?.id;
+            if (!itemId) {
+              const addResult = await github.graphql(`
+                mutation($projectId: ID!, $contentId: ID!) {
+                  addProjectV2ItemById(input: { projectId: $projectId, contentId: $contentId }) {
+                    item { id }
+                  }
+                }`,
+                { projectId: project.id, contentId: content.id }
+              );
+              itemId = addResult.addProjectV2ItemById.item.id;
+            }
+
+            const fieldsByName = new Map(project.fields.nodes.filter(Boolean).map((field) => [field.name, field]));
+            const setSelectField = async (fieldName, valueName) => {
+              if (!valueName) return;
+              const field = fieldsByName.get(fieldName);
+              const option = field?.options?.find((opt) => opt.name === valueName);
+              if (!field || !option) {
+                core.notice(`Project field option not found: ${fieldName}=${valueName}`);
+                return;
+              }
+              await github.graphql(`
+                mutation($projectId: ID!, $itemId: ID!, $fieldId: ID!, $optionId: String!) {
+                  updateProjectV2ItemFieldValue(input: {
+                    projectId: $projectId,
+                    itemId: $itemId,
+                    fieldId: $fieldId,
+                    value: { singleSelectOptionId: $optionId }
+                  }) { projectV2Item { id } }
+                }`,
+                { projectId: project.id, itemId, fieldId: field.id, optionId: option.id }
+              );
+            };
+            const setTextField = async (fieldName, text) => {
+              if (!text) return;
+              const field = fieldsByName.get(fieldName);
+              if (!field) {
+                core.notice(`Project text field not found: ${fieldName}`);
+                return;
+              }
+              await github.graphql(`
+                mutation($projectId: ID!, $itemId: ID!, $fieldId: ID!, $text: String!) {
+                  updateProjectV2ItemFieldValue(input: {
+                    projectId: $projectId,
+                    itemId: $itemId,
+                    fieldId: $fieldId,
+                    value: { text: $text }
+                  }) { projectV2Item { id } }
+                }`,
+                { projectId: project.id, itemId, fieldId: field.id, text }
+              );
+            };
+
+            const firstByPrefix = (prefix) => labels.find((label) => label.startsWith(prefix));
+            const type = labels.find((label) => ['plan', 'feature', 'bug', 'task', 'incident', 'tech-debt'].includes(label));
+            const typeFieldName = fieldsByName.has('Type') ? 'Type' : 'Work Type';
+            const repoFieldName = fieldsByName.has('Repo') ? 'Repo' : 'Target Repo';
+            await setSelectField('Status', firstByPrefix('status:'));
+            await setSelectField('Owner', firstByPrefix('agent:'));
+            await setSelectField('Severity', firstByPrefix('sev:'));
+            await setSelectField(typeFieldName, type);
+            await setTextField(repoFieldName, content.repository?.nameWithOwner);
+
+            core.info(`Synced ${itemUrl} to ${ownerLogin} project #${projectNumber}.`);

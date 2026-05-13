@@ -1,0 +1,54 @@
+name: Task
+description: Track execution work that is already scoped.
+title: "[Task]: "
+labels: ["task", "status:ready", "agent:pm", "sev:P2"]
+body:
+  - type: textarea
+    id: objective
+    attributes:
+      label: Objective
+    validations:
+      required: true
+  - type: textarea
+    id: deliverable
+    attributes:
+      label: Deliverable
+    validations:
+      required: true
+  - type: dropdown
+    id: owner
+    attributes:
+      label: Owner Agent
+      options:
+        - agent:pm
+        - agent:seniordev
+        - agent:juniordev
+        - agent:devops
+    validations:
+      required: true
+  - type: dropdown
+    id: severity
+    attributes:
+      label: Severity
+      options:
+        - sev:P2
+        - sev:P1
+        - sev:P0
+    validations:
+      required: true
+  - type: dropdown
+    id: status
+    attributes:
+      label: Initial Status
+      options:
+        - status:ready
+        - status:in-progress
+        - status:blocked
+    validations:
+      required: true
+  - type: textarea
+    id: acceptance
+    attributes:
+      label: Acceptance Criteria
+    validations:
+      required: true

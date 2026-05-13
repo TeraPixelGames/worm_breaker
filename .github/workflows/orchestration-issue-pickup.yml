@@ -1,0 +1,140 @@
+name: Orchestration Issue Pickup
+
+on:
+  issues:
+    types: [opened, reopened, labeled, unlabeled]
+
+permissions:
+  contents: read
+  issues: write
+
+concurrency:
+  group: orchestration-issue-pickup-${{ github.event.issue.number }}
+  cancel-in-progress: true
+
+jobs:
+  pickup:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Route issue and normalize labels
+        uses: actions/github-script@60a0d83039c74a4aee543508d2ffcb1c3799cdea # v7.0.1
+        with:
+          script: |
+            const issue = context.payload.issue;
+            if (!issue) return;
+
+            const ownerLabels = [
+              'agent:ceo', 'agent:cto', 'agent:cfo', 'agent:cmo',
+              'agent:product', 'agent:pm', 'agent:devops',
+              'agent:seniordev', 'agent:juniordev'
+            ];
+            const statusLabels = [
+              'status:triage', 'status:ready', 'status:in-progress',
+              'status:needs-review', 'status:blocked', 'status:done'
+            ];
+            const severityLabels = ['sev:P0', 'sev:P1', 'sev:P2'];
+
+            const routeRules = [
+              ['incident', 'agent:devops'],
+              ['prod-failure', 'agent:devops'],
+              ['staging-failure', 'agent:devops'],
+              ['deploy', 'agent:devops'],
+              ['ci', 'agent:devops'],
+              ['revenue-anomaly', 'agent:cfo'],
+              ['tech-debt', 'agent:cto'],
+              ['feature', 'agent:product'],
+              ['plan', 'agent:pm'],
+              ['bug', 'agent:seniordev'],
+              ['task', 'agent:pm']
+            ];
+
+            const watchersByOwner = {
+              'agent:devops': ['agent:cto', 'agent:pm'],
+              'agent:seniordev': ['agent:pm', 'agent:product'],
+              'agent:product': ['agent:pm', 'agent:cto'],
+              'agent:pm': ['agent:product'],
+              'agent:cto': ['agent:seniordev', 'agent:pm'],
+              'agent:cfo': ['agent:ceo', 'agent:cto', 'agent:cmo']
+            };
+
+            const current = (issue.labels || []).map((l) => typeof l === 'string' ? l : l.name);
+            let next = Array.from(new Set(current));
+
+            const pickRouteOwner = (labels) => {
+              if (labels.includes('feature') && labels.includes('bug')) return 'agent:pm';
+              for (const [trigger, owner] of routeRules) {
+                if (labels.includes(trigger)) return owner;
+              }
+              return null;
+            };
+
+            const setExclusive = (labels, family, selected) => {
+              const filtered = labels.filter((l) => !family.includes(l));
+              if (selected) filtered.push(selected);
+              return Array.from(new Set(filtered));
+            };
+
+            const existingOwners = next.filter((l) => ownerLabels.includes(l));
+            let owner = existingOwners.length === 1 ? existingOwners[0] : null;
+            if (!owner) owner = pickRouteOwner(next);
+            if (owner) next = setExclusive(next, ownerLabels, owner);
+
+            const existingStatus = next.filter((l) => statusLabels.includes(l));
+            const status = existingStatus[0] || 'status:triage';
+            next = setExclusive(next, statusLabels, status);
+
+            const existingSeverity = next.filter((l) => severityLabels.includes(l));
+            const severity = existingSeverity[0] || 'sev:P2';
+            next = setExclusive(next, severityLabels, severity);
+
+            const curSorted = Array.from(new Set(current)).sort();
+            const nextSorted = Array.from(new Set(next)).sort();
+            if (JSON.stringify(curSorted) !== JSON.stringify(nextSorted)) {
+              await github.rest.issues.setLabels({
+                owner: context.repo.owner,
+                repo: context.repo.repo,
+                issue_number: issue.number,
+                labels: nextSorted
+              });
+            }
+
+            const marker = '<!-- orchestration:pickup -->';
+            const watchers = owner ? (watchersByOwner[owner] || []) : [];
+            const lines = [
+              marker,
+              '',
+              '### Orchestration Pickup',
+              '- Owner: ' + (owner || 'unassigned'),
+              '- Severity: ' + severity,
+              '- Status: ' + status,
+              '- Watchers: ' + (watchers.length ? watchers.join(', ') : 'none'),
+              '',
+              '### Commands',
+              '- /handoff pm|seniordev|juniordev|devops|product|cto|cfo|cmo|ceo',
+              '- /ready  /start  /review  /done  /block <reason>'
+            ];
+            const body = lines.join('\n');
+
+            const comments = await github.paginate(github.rest.issues.listComments, {
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              issue_number: issue.number,
+              per_page: 100
+            });
+            const existing = comments.find((c) => (c.body || '').includes(marker));
+
+            if (existing) {
+              await github.rest.issues.updateComment({
+                owner: context.repo.owner,
+                repo: context.repo.repo,
+                comment_id: existing.id,
+                body
+              });
+            } else {
+              await github.rest.issues.createComment({
+                owner: context.repo.owner,
+                repo: context.repo.repo,
+                issue_number: issue.number,
+                body
+              });
+            }

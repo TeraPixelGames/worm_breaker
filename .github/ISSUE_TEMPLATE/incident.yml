@@ -1,0 +1,82 @@
+name: Incident
+description: Record and manage a staging/prod incident with a complete response trail.
+title: "[Incident]: "
+labels: ["incident", "status:triage", "agent:devops", "sev:P1"]
+body:
+  - type: dropdown
+    id: environment
+    attributes:
+      label: Environment
+      options:
+        - prod
+        - staging
+    validations:
+      required: true
+  - type: dropdown
+    id: owner
+    attributes:
+      label: Owner Agent
+      description: Match with the corresponding `agent:*` label.
+      options:
+        - agent:devops
+        - agent:seniordev
+        - agent:pm
+        - agent:cto
+    validations:
+      required: true
+  - type: dropdown
+    id: severity
+    attributes:
+      label: Severity
+      options:
+        - sev:P0
+        - sev:P1
+        - sev:P2
+    validations:
+      required: true
+  - type: dropdown
+    id: status
+    attributes:
+      label: Initial Status
+      options:
+        - status:triage
+        - status:in-progress
+        - status:blocked
+    validations:
+      required: true
+  - type: textarea
+    id: summary
+    attributes:
+      label: Incident Summary
+      placeholder: What failed, who is affected, and when did it start?
+    validations:
+      required: true
+  - type: input
+    id: run_url
+    attributes:
+      label: Run or Evidence URL
+      placeholder: https://github.com/.../actions/runs/...
+    validations:
+      required: true
+  - type: textarea
+    id: acceptance
+    attributes:
+      label: Acceptance Criteria
+      description: Define the conditions that must be true before closure.
+      placeholder: |
+        - Service restored and verified
+        - Root cause documented
+        - Prevention action linked
+    validations:
+      required: true
+  - type: textarea
+    id: checklist
+    attributes:
+      label: Response Checklist
+      value: |
+        - [ ] Triage completed
+        - [ ] Containment action executed
+        - [ ] Verification complete
+        - [ ] Prevention action created
+    validations:
+      required: true

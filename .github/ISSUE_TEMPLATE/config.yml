@@ -1,0 +1,5 @@
+blank_issues_enabled: false
+contact_links:
+  - name: Studio Orchestration Guide
+    url: https://github.com/Terapixel-Games/studio-orchestration/blob/main/README.md
+    about: Start here for issue routing and protocol usage.

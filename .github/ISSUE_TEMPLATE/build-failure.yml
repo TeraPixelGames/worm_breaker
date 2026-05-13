@@ -1,0 +1,69 @@
+name: Build Failure
+description: Track CI/build failures with owner, severity, and recovery plan.
+title: "[Build Failure]: "
+labels: ["ci", "staging-failure", "status:triage", "agent:devops", "sev:P1"]
+body:
+  - type: input
+    id: workflow
+    attributes:
+      label: Workflow Name
+    validations:
+      required: true
+  - type: input
+    id: run_url
+    attributes:
+      label: Failed Run URL
+    validations:
+      required: true
+  - type: input
+    id: commit
+    attributes:
+      label: Commit SHA or Tag
+    validations:
+      required: true
+  - type: dropdown
+    id: owner
+    attributes:
+      label: Owner Agent
+      options:
+        - agent:devops
+        - agent:seniordev
+        - agent:pm
+    validations:
+      required: true
+  - type: dropdown
+    id: severity
+    attributes:
+      label: Severity
+      options:
+        - sev:P1
+        - sev:P2
+        - sev:P0
+    validations:
+      required: true
+  - type: dropdown
+    id: status
+    attributes:
+      label: Initial Status
+      options:
+        - status:triage
+        - status:in-progress
+        - status:blocked
+    validations:
+      required: true
+  - type: textarea
+    id: failing_step
+    attributes:
+      label: First Failing Step
+    validations:
+      required: true
+  - type: textarea
+    id: acceptance
+    attributes:
+      label: Acceptance Criteria
+      placeholder: |
+        - Failing workflow is green
+        - Root cause identified
+        - Guardrail added
+    validations:
+      required: true
