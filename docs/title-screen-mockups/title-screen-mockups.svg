@@ -1,0 +1,145 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="3840" height="1080" viewBox="0 0 3840 1080">
+  <defs>
+    <radialGradient id="void" cx="50%" cy="50%" r="72%">
+      <stop offset="0%" stop-color="#2df8db" stop-opacity="0.52"/>
+      <stop offset="20%" stop-color="#17105c" stop-opacity="0.84"/>
+      <stop offset="56%" stop-color="#090019" stop-opacity="1"/>
+      <stop offset="100%" stop-color="#020008" stop-opacity="1"/>
+    </radialGradient>
+    <linearGradient id="panel" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0%" stop-color="#07001e" stop-opacity="0.94"/>
+      <stop offset="100%" stop-color="#15002a" stop-opacity="0.88"/>
+    </linearGradient>
+    <linearGradient id="hot" x1="0" y1="0" x2="1" y2="0">
+      <stop offset="0%" stop-color="#20ffd9"/>
+      <stop offset="100%" stop-color="#fff044"/>
+    </linearGradient>
+    <linearGradient id="magenta" x1="0" y1="0" x2="1" y2="0">
+      <stop offset="0%" stop-color="#ff1fcf"/>
+      <stop offset="100%" stop-color="#ffc928"/>
+    </linearGradient>
+    <filter id="glow">
+      <feGaussianBlur stdDeviation="6" result="blur"/>
+      <feMerge>
+        <feMergeNode in="blur"/>
+        <feMergeNode in="SourceGraphic"/>
+      </feMerge>
+    </filter>
+    <style>
+      .frame-title { font: 700 26px Arial, sans-serif; fill: #dffefa; letter-spacing: 2px; }
+      .kicker { font: 700 24px Arial, sans-serif; fill: #25ffe0; letter-spacing: 4px; }
+      .title { font: 900 82px Arial, sans-serif; fill: #fff15e; letter-spacing: 1px; }
+      .subtitle { font: 500 28px Arial, sans-serif; fill: #d5fffb; }
+      .small { font: 600 20px Arial, sans-serif; fill: #98d9d4; }
+      .tiny { font: 600 16px Arial, sans-serif; fill: #88a9b0; letter-spacing: 1px; }
+      .button { font: 800 28px Arial, sans-serif; fill: #041018; letter-spacing: 1px; }
+      .button-light { font: 800 24px Arial, sans-serif; fill: #f5ffff; letter-spacing: 1px; }
+      .chip { font: 700 18px Arial, sans-serif; fill: #fff0aa; letter-spacing: 1px; }
+      .line { stroke: #25ffe0; stroke-opacity: 0.42; stroke-width: 2; fill: none; }
+      .line-hot { stroke: #ff25d4; stroke-opacity: 0.48; stroke-width: 3; fill: none; }
+    </style>
+  </defs>
+
+  <rect width="3840" height="1080" fill="#05000d"/>
+
+  <!-- Mockup 01 -->
+  <g transform="translate(0,0)">
+    <rect width="1280" height="1080" fill="url(#void)"/>
+    <text x="64" y="72" class="frame-title">01 / CINEMATIC SIGNAL PROMPT</text>
+    <g opacity="0.62" filter="url(#glow)">
+      <circle cx="640" cy="500" r="360" class="line"/>
+      <circle cx="640" cy="500" r="270" class="line-hot"/>
+      <circle cx="640" cy="500" r="180" class="line"/>
+      <path d="M330 500 C470 260 820 250 950 500 C820 750 470 740 330 500Z" class="line-hot"/>
+      <path d="M640 155 L700 500 L640 845 L580 500Z" fill="#20ffd9" opacity="0.1"/>
+    </g>
+    <g transform="translate(112,690)">
+      <text x="0" y="0" class="kicker">SIGNAL TUNNEL ONLINE</text>
+      <text x="0" y="88" class="title">WORM BREAKER</text>
+      <text x="4" y="136" class="subtitle">Hold the stabilizer. Crack the signal gate.</text>
+      <rect x="0" y="190" width="424" height="76" rx="20" fill="url(#hot)" filter="url(#glow)"/>
+      <text x="48" y="240" class="button">PRESS TO LAUNCH</text>
+      <text x="0" y="310" class="small">Best depth L3 / Signal 8420 / Spiral streak 4</text>
+    </g>
+    <g transform="translate(920,780)">
+      <rect x="0" y="0" width="230" height="54" rx="18" fill="#08001e" stroke="#25ffe0" stroke-opacity="0.55"/>
+      <text x="28" y="35" class="chip">AUDIO: PULSE</text>
+      <rect x="0" y="70" width="230" height="54" rx="18" fill="#08001e" stroke="#ff25d4" stroke-opacity="0.55"/>
+      <text x="28" y="105" class="chip">RIVAL: 1200</text>
+    </g>
+  </g>
+
+  <!-- Mockup 02 -->
+  <g transform="translate(1280,0)">
+    <rect width="1280" height="1080" fill="#060014"/>
+    <text x="64" y="72" class="frame-title">02 / ASYMMETRIC LAUNCH DECK</text>
+    <g opacity="0.52">
+      <circle cx="900" cy="510" r="500" class="line"/>
+      <circle cx="900" cy="510" r="380" class="line-hot"/>
+      <circle cx="900" cy="510" r="260" class="line"/>
+      <circle cx="900" cy="510" r="145" stroke="#fff044" stroke-opacity="0.34" stroke-width="4" fill="none"/>
+      <path d="M900 30 C1130 200 1190 790 900 1000 C620 800 630 230 900 30Z" fill="#ff25d4" opacity="0.08"/>
+    </g>
+    <g transform="translate(90,165)">
+      <rect x="0" y="0" width="530" height="710" rx="28" fill="url(#panel)" stroke="#25ffe0" stroke-opacity="0.65" stroke-width="3"/>
+      <text x="44" y="76" class="kicker">RUN BAY</text>
+      <text x="40" y="170" class="title">WORM</text>
+      <text x="40" y="252" class="title">BREAKER</text>
+      <text x="44" y="310" class="subtitle">Stability route recommended.</text>
+      <rect x="44" y="364" width="410" height="78" rx="18" fill="url(#hot)" filter="url(#glow)"/>
+      <text x="92" y="414" class="button">LAUNCH STABILITY</text>
+      <rect x="44" y="464" width="410" height="64" rx="18" fill="#12012e" stroke="#ff25d4" stroke-width="3"/>
+      <text x="104" y="506" class="button-light">ARM OVERDRIVE</text>
+      <rect x="44" y="548" width="190" height="54" rx="16" fill="#1b0633" stroke="#fff044" stroke-opacity="0.7"/>
+      <text x="80" y="583" class="button-light">TUTORIAL</text>
+      <rect x="264" y="548" width="190" height="54" rx="16" fill="#090018" stroke="#7b8d9c" stroke-opacity="0.5"/>
+      <text x="328" y="583" class="button-light">EXIT</text>
+      <text x="44" y="660" class="small">Signal 8420 / Depth L3 / Streak 4</text>
+    </g>
+    <g transform="translate(760,210)">
+      <rect x="0" y="0" width="360" height="92" rx="20" fill="#08001e" stroke="#25ffe0" stroke-opacity="0.48"/>
+      <text x="28" y="37" class="tiny">CURRENT RIVAL</text>
+      <text x="28" y="70" class="subtitle">Pressure target 1200</text>
+      <rect x="0" y="124" width="360" height="92" rx="20" fill="#08001e" stroke="#ff25d4" stroke-opacity="0.48"/>
+      <text x="28" y="161" class="tiny">TUNNEL STATE</text>
+      <text x="28" y="194" class="subtitle">Gate unstable</text>
+    </g>
+  </g>
+
+  <!-- Mockup 03 -->
+  <g transform="translate(2560,0)">
+    <rect width="1280" height="1080" fill="#070014"/>
+    <text x="64" y="72" class="frame-title">03 / MODE SELECT TACTICAL BOARD</text>
+    <g opacity="0.38">
+      <circle cx="642" cy="526" r="470" class="line"/>
+      <path d="M210 526 H1070 M642 120 V930" stroke="#25ffe0" stroke-opacity="0.2" stroke-width="2"/>
+      <path d="M240 230 C520 410 760 410 1040 230 M240 820 C520 640 760 640 1040 820" class="line-hot"/>
+    </g>
+    <text x="92" y="158" class="kicker">SELECT RUN PROFILE</text>
+    <text x="92" y="250" class="title">WORM BREAKER</text>
+    <g transform="translate(92,330)">
+      <rect x="0" y="0" width="500" height="390" rx="24" fill="url(#panel)" stroke="#25ffe0" stroke-width="4" filter="url(#glow)"/>
+      <text x="34" y="58" class="tiny">RECOMMENDED</text>
+      <text x="34" y="122" class="subtitle">STABILITY RUN</text>
+      <text x="34" y="172" class="small">Wider stabilizer / calmer pulse / best for depth push</text>
+      <rect x="34" y="226" width="350" height="72" rx="18" fill="url(#hot)"/>
+      <text x="86" y="274" class="button">LAUNCH RUN</text>
+      <text x="34" y="344" class="small">Projected pressure: 62%</text>
+    </g>
+    <g transform="translate(660,330)">
+      <rect x="0" y="0" width="430" height="180" rx="24" fill="#09001e" stroke="#ff25d4" stroke-width="3"/>
+      <text x="30" y="60" class="subtitle">OVERDRIVE</text>
+      <text x="30" y="104" class="small">Higher charge / narrower catch arc</text>
+      <text x="30" y="145" class="chip">ARM MODIFIER</text>
+      <rect x="0" y="210" width="430" height="180" rx="24" fill="#09001e" stroke="#fff044" stroke-opacity="0.66" stroke-width="3"/>
+      <text x="30" y="270" class="subtitle">TUTORIAL TRACE</text>
+      <text x="30" y="314" class="small">Practice stabilizer rotation</text>
+      <text x="30" y="355" class="chip">START TRAINING</text>
+    </g>
+    <g transform="translate(92,780)">
+      <rect x="0" y="0" width="998" height="92" rx="22" fill="#060018" stroke="#25ffe0" stroke-opacity="0.42"/>
+      <text x="32" y="38" class="tiny">LIVE RUN CONTEXT</text>
+      <text x="32" y="70" class="small">Best depth L3     Signal record 8420     Rival beat streak 4     Next gate: unstable spiral</text>
+    </g>
+  </g>
+</svg>
