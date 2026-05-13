@@ -1,0 +1,147 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1800" height="1200" viewBox="0 0 1800 1200">
+  <defs>
+    <linearGradient id="tunnelA" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0" stop-color="#061617"/>
+      <stop offset="0.48" stop-color="#14351d"/>
+      <stop offset="1" stop-color="#3c123c"/>
+    </linearGradient>
+    <linearGradient id="hot" x1="0" y1="0" x2="1" y2="0">
+      <stop offset="0" stop-color="#12ffd6"/>
+      <stop offset="0.5" stop-color="#ffe94a"/>
+      <stop offset="1" stop-color="#ff2bd6"/>
+    </linearGradient>
+    <filter id="glow" x="-40%" y="-40%" width="180%" height="180%">
+      <feGaussianBlur stdDeviation="7" result="blur"/>
+      <feMerge>
+        <feMergeNode in="blur"/>
+        <feMergeNode in="SourceGraphic"/>
+      </feMerge>
+    </filter>
+    <style>
+      .frame { fill: #061012; stroke: #1efbe2; stroke-opacity: .55; stroke-width: 2; }
+      .panel { fill: rgba(3, 9, 18, .82); stroke: #22ffe0; stroke-opacity: .8; stroke-width: 2; }
+      .panel2 { fill: rgba(19, 4, 35, .84); stroke: #ff39dc; stroke-opacity: .75; stroke-width: 2; }
+      .small { font-family: "Segoe UI", Arial, sans-serif; font-size: 16px; fill: #bafef6; letter-spacing: 0; }
+      .tiny { font-family: "Segoe UI", Arial, sans-serif; font-size: 12px; fill: #9fd7d7; letter-spacing: 0; }
+      .label { font-family: "Segoe UI", Arial, sans-serif; font-size: 20px; font-weight: 700; fill: #fff066; letter-spacing: 0; }
+      .title { font-family: "Segoe UI", Arial, sans-serif; font-size: 28px; font-weight: 800; fill: #fff36b; letter-spacing: 0; }
+      .note { font-family: "Segoe UI", Arial, sans-serif; font-size: 15px; fill: #d4fff9; letter-spacing: 0; }
+      .chip { fill: rgba(21,255,220,.14); stroke: #1bffe0; stroke-width: 1.5; }
+      .warn { fill: rgba(255,38,205,.17); stroke: #ff35d4; stroke-width: 1.5; }
+      .ghost { fill: none; stroke: rgba(255,255,255,.18); stroke-width: 3; }
+    </style>
+  </defs>
+
+  <rect width="1800" height="1200" fill="#031014"/>
+  <text x="44" y="58" class="title">WORM BREAKER GAMEPLAY UI - DESIGN PASS</text>
+  <text x="44" y="88" class="note">Goal: keep the tunnel playable while moving critical state closer to the paddle, pulse, and signal gate.</text>
+
+  <g transform="translate(44 126)">
+    <rect class="frame" width="540" height="960" rx="18"/>
+    <text x="24" y="46" class="label">01 / SIGNAL COCKPIT HUD</text>
+    <text x="24" y="74" class="tiny">Best next implementation target</text>
+    <rect x="24" y="102" width="492" height="704" rx="10" fill="url(#tunnelA)"/>
+    <g opacity=".42">
+      <circle cx="270" cy="372" r="290" class="ghost"/>
+      <circle cx="270" cy="372" r="230" class="ghost"/>
+      <circle cx="270" cy="372" r="170" class="ghost"/>
+      <circle cx="270" cy="372" r="110" class="ghost"/>
+      <path d="M270 82 L270 662 M68 160 L472 584 M24 372 L516 372 M68 584 L472 160" stroke="#ff2a9d" stroke-width="3" opacity=".55"/>
+    </g>
+    <circle cx="270" cy="372" r="52" fill="none" stroke="#dffff8" stroke-width="8" filter="url(#glow)"/>
+    <circle cx="298" cy="484" r="7" fill="#ff3fd8" filter="url(#glow)"/>
+    <path d="M151 568 C208 620 331 634 403 574" fill="none" stroke="url(#hot)" stroke-width="30" stroke-linecap="round"/>
+    <path d="M120 604 C190 684 360 688 430 604" fill="none" stroke="#092328" stroke-width="18" opacity=".88"/>
+    <text x="164" y="610" class="tiny" fill="#bafef6">STABILIZER WINDOW</text>
+
+    <rect x="56" y="132" width="130" height="56" rx="10" class="panel"/>
+    <text x="70" y="154" class="tiny">SIGNAL</text>
+    <text x="70" y="177" class="label">485</text>
+    <rect x="202" y="132" width="136" height="56" rx="10" class="panel"/>
+    <text x="216" y="154" class="tiny">DEPTH</text>
+    <text x="216" y="177" class="label">1 / 3</text>
+    <rect x="354" y="132" width="130" height="56" rx="10" class="panel2"/>
+    <text x="368" y="154" class="tiny">PULSE</text>
+    <text x="368" y="177" class="label">x4</text>
+
+    <rect x="78" y="724" width="384" height="58" rx="14" fill="rgba(0,0,0,.56)" stroke="#fff36b" stroke-width="2"/>
+    <text x="99" y="748" class="small" fill="#fff36b">RIVAL PRESSURE 42%</text>
+    <rect x="98" y="762" width="316" height="8" rx="4" fill="#14282b"/>
+    <rect x="98" y="762" width="132" height="8" rx="4" fill="url(#hot)"/>
+
+    <text x="24" y="844" class="small">Moves score, depth, combo into top read cells.</text>
+    <text x="24" y="870" class="small">Keeps bottom dock only for pressure and mode.</text>
+    <text x="24" y="896" class="small">Paddle zone label explains the catch window.</text>
+    <text x="24" y="922" class="small">Works in desktop and portrait with same hierarchy.</text>
+  </g>
+
+  <g transform="translate(630 126)">
+    <rect class="frame" width="540" height="960" rx="18"/>
+    <text x="24" y="46" class="label">02 / TARGETING RING READ</text>
+    <text x="24" y="74" class="tiny">Use when player misses feel hard to diagnose</text>
+    <rect x="24" y="102" width="492" height="704" rx="10" fill="url(#tunnelA)"/>
+    <g opacity=".38">
+      <circle cx="270" cy="372" r="280" class="ghost"/>
+      <circle cx="270" cy="372" r="214" class="ghost"/>
+      <circle cx="270" cy="372" r="148" class="ghost"/>
+      <path d="M270 98 L270 646 M78 180 L462 564 M24 372 L516 372 M78 564 L462 180" stroke="#ff2a9d" stroke-width="3" opacity=".55"/>
+    </g>
+    <circle cx="270" cy="372" r="58" fill="none" stroke="#eaffef" stroke-width="9" filter="url(#glow)"/>
+    <circle cx="318" cy="512" r="8" fill="#ff45d3" filter="url(#glow)"/>
+    <path d="M186 574 C240 602 318 603 370 574" fill="none" stroke="#19ffd7" stroke-width="34" stroke-linecap="round"/>
+    <path d="M134 574 C160 592 174 602 190 610" fill="none" stroke="#ff304a" stroke-width="20" stroke-linecap="round"/>
+    <path d="M366 574 C394 592 412 604 432 612" fill="none" stroke="#2342ff" stroke-width="20" stroke-linecap="round"/>
+
+    <path d="M302 514 C320 552 336 570 362 580" fill="none" stroke="#fff36b" stroke-width="5" stroke-dasharray="10 8" filter="url(#glow)"/>
+    <rect x="314" y="444" width="162" height="58" rx="12" class="panel2"/>
+    <text x="330" y="468" class="small" fill="#fff36b">ALIGN RIGHT</text>
+    <text x="330" y="490" class="tiny">pulse impact in 0.7s</text>
+    <rect x="66" y="214" width="126" height="42" rx="21" class="chip"/>
+    <text x="84" y="240" class="tiny">SLOW 4s</text>
+    <rect x="338" y="214" width="136" height="42" rx="21" class="warn"/>
+    <text x="357" y="240" class="tiny">MISS RISK</text>
+
+    <rect x="88" y="724" width="364" height="58" rx="14" fill="rgba(0,0,0,.58)" stroke="#1bffe0" stroke-width="2"/>
+    <text x="108" y="748" class="small" fill="#bafef6">TUNNEL WARMUP 10 / 43</text>
+    <rect x="108" y="762" width="320" height="7" rx="3.5" fill="#173237"/>
+    <rect x="108" y="762" width="74" height="7" rx="3.5" fill="#1bffe0"/>
+
+    <text x="24" y="844" class="small">Adds a predictive pulse-to-paddle guide.</text>
+    <text x="24" y="870" class="small">Shows warning only when miss risk is meaningful.</text>
+    <text x="24" y="896" class="small">Turns powerups into short tactical chips.</text>
+    <text x="24" y="922" class="small">Reduces dependence on reading tiny bottom text.</text>
+  </g>
+
+  <g transform="translate(1216 126)">
+    <rect class="frame" width="540" height="960" rx="18"/>
+    <text x="24" y="46" class="label">03 / BREACH EVENT LAYER</text>
+    <text x="24" y="74" class="tiny">Use for level clear, combo, powerup, and danger moments</text>
+    <rect x="24" y="102" width="492" height="704" rx="10" fill="url(#tunnelA)"/>
+    <g opacity=".34">
+      <circle cx="270" cy="372" r="288" class="ghost"/>
+      <circle cx="270" cy="372" r="224" class="ghost"/>
+      <circle cx="270" cy="372" r="158" class="ghost"/>
+      <path d="M270 84 L270 660 M62 164 L478 580 M24 372 L516 372 M62 580 L478 164" stroke="#ff2a9d" stroke-width="3" opacity=".55"/>
+    </g>
+    <circle cx="270" cy="372" r="76" fill="rgba(255,243,107,.10)" stroke="#fff36b" stroke-width="5" filter="url(#glow)"/>
+    <circle cx="270" cy="372" r="46" fill="none" stroke="#dffff8" stroke-width="8" filter="url(#glow)"/>
+    <path d="M146 568 C210 634 335 638 402 572" fill="none" stroke="url(#hot)" stroke-width="30" stroke-linecap="round"/>
+    <rect x="82" y="256" width="376" height="104" rx="18" fill="rgba(5,0,20,.74)" stroke="#fff36b" stroke-width="2.5"/>
+    <text x="116" y="293" class="title" fill="#fff36b">SIGNAL GATE HIT</text>
+    <text x="116" y="324" class="small">hold pressure - breach at 75%</text>
+    <rect x="116" y="338" width="300" height="8" rx="4" fill="#1d2830"/>
+    <rect x="116" y="338" width="226" height="8" rx="4" fill="url(#hot)"/>
+    <rect x="72" y="702" width="396" height="80" rx="16" class="panel"/>
+    <text x="96" y="730" class="small" fill="#fff36b">PULSE STREAK x6</text>
+    <text x="96" y="755" class="tiny">+250 signal charge / next hit overheats tunnel</text>
+
+    <text x="24" y="844" class="small">Uses temporary event cards, not permanent clutter.</text>
+    <text x="24" y="870" class="small">Connects gate hits, combos, and level clear.</text>
+    <text x="24" y="896" class="small">Can reuse current MessageLabel behavior.</text>
+    <text x="24" y="922" class="small">Keeps center brief and fades back to play.</text>
+  </g>
+
+  <g transform="translate(44 1110)">
+    <text class="note" x="0" y="0">Current capture reference: artifacts/gameplay-current-desktop.png. Key issue: the gameplay spectacle is strong, but critical state sits in a small bottom panel away from action.</text>
+  </g>
+</svg>
