@@ -36,10 +36,17 @@ static func ball_vs_brick(ball_theta: float, ball_z: float, brick: Dictionary) -
 		"delta_z": delta_z
 	}
 
-static func ball_vs_paddle(ball_theta: float, ball_z: float, paddle_theta: float, paddle_width: float, paddle_z: float) -> bool:
+static func ball_vs_paddle(
+	ball_theta: float,
+	ball_z: float,
+	paddle_theta: float,
+	paddle_width: float,
+	paddle_z: float,
+	ball_theta_radius: float = 0.0
+) -> bool:
 	if absf(ball_z - paddle_z) > 0.45:
 		return false
-	return TunnelMath.theta_overlap(ball_theta, 0.0, paddle_theta, paddle_width * 0.5)
+	return TunnelMath.theta_overlap(ball_theta, maxf(ball_theta_radius, 0.0), paddle_theta, paddle_width * 0.5)
 
 static func reflect_from_paddle(
 	v_theta: float,

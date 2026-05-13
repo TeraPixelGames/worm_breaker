@@ -13,12 +13,14 @@ var z_size: float = 1.0
 
 var _material: StandardMaterial3D
 var _flash_timer: float = 0.0
+var _phase: float = 0.0
 
 func _ready() -> void:
 	_material = StandardMaterial3D.new()
-	_material.roughness = 0.45
-	_material.metallic = 0.05
+	_material.roughness = 0.24
+	_material.metallic = 0.18
 	_material.cull_mode = BaseMaterial3D.CULL_DISABLED
+	_material.emission_enabled = true
 	body.material_override = _material
 	_refresh_color()
 
@@ -29,6 +31,7 @@ func setup(data: Dictionary, surface_radius: float, default_theta_size: float, d
 	z_size = float(data.get("z_size", default_z_size))
 	hp = max(1, int(data.get("hp", 1)))
 	max_hp = hp
+	_phase = fmod(absf(theta_center) * 0.73 + z_center * 0.11, 1.0)
 
 	_place_on_surface(surface_radius)
 	_refresh_color()
@@ -50,7 +53,9 @@ func get_collision_data(ball_theta_radius: float, ball_z_radius: float) -> Dicti
 	}
 
 func _process(delta: float) -> void:
+	_phase = fmod(_phase + delta * 0.08, 1.0)
 	if _flash_timer <= 0.0:
+		_refresh_color()
 		return
 	_flash_timer = max(_flash_timer - delta, 0.0)
 	var flash_alpha: float = _flash_timer / 0.12
@@ -73,7 +78,13 @@ func _place_on_surface(surface_radius: float) -> void:
 		)
 
 func _refresh_color() -> void:
+	_material.emission_enabled = true
+	var hue := fmod(_phase + (0.56 if hp >= 2 else 0.88), 1.0)
 	if hp >= 2:
-		_material.albedo_color = Color(0.25, 0.75, 1.0)
+		_material.albedo_color = Color.from_hsv(hue, 0.78, 0.92)
+		_material.emission = Color.from_hsv(hue, 0.95, 0.55)
+		_material.emission_energy_multiplier = 0.8
 	else:
-		_material.albedo_color = Color(1.0, 0.6, 0.2)
+		_material.albedo_color = Color.from_hsv(hue, 0.88, 1.0)
+		_material.emission = Color.from_hsv(hue, 1.0, 0.68)
+		_material.emission_energy_multiplier = 0.72
