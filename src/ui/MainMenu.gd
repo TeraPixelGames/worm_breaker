@@ -3,6 +3,7 @@ extends Control
 const JULIA_SHADER: Shader = preload("res://src/shaders/fractals/julia_set.gdshader")
 
 @onready var summary_label: Label = $Center/Panel/VBox/SummaryLabel
+@onready var center: Control = $Center
 @onready var panel: Panel = $Center/Panel
 @onready var vbox: VBoxContainer = $Center/Panel/VBox
 @onready var title_label: Label = $Center/Panel/VBox/TitleLabel
@@ -13,10 +14,10 @@ const JULIA_SHADER: Shader = preload("res://src/shaders/fractals/julia_set.gdsha
 @onready var tutorial_button: Button = $Center/Panel/VBox/TutorialButton
 @onready var quit_button: Button = $Center/Panel/VBox/QuitButton
 
-const PANEL_MAX_WIDTH: float = 740.0
-const PANEL_MAX_HEIGHT: float = 620.0
-const PANEL_SAFE_MARGIN: float = 48.0
-const PANEL_INSET: float = 48.0
+const PANEL_MAX_WIDTH: float = 620.0
+const PANEL_MAX_HEIGHT: float = 600.0
+const PANEL_SAFE_MARGIN: float = 36.0
+const PANEL_INSET: float = 38.0
 
 var _time := 0.0
 var _rings: Array[Panel] = []
@@ -129,14 +130,14 @@ func _build_fractal_backdrop() -> void:
 	move_child(fractal, 2)
 
 func _apply_launch_deck_style() -> void:
-	panel.add_theme_stylebox_override("panel", _panel_style(Color(0.02, 0.0, 0.075, 0.86), Color(0.96, 0.08, 0.9, 0.65), 34))
+	panel.add_theme_stylebox_override("panel", _panel_style(Color(0.015, 0.0, 0.06, 0.88), Color(0.0, 0.96, 0.88, 0.68), 24))
 
 	title_label.text = "WORM BREAKER"
-	title_label.add_theme_font_size_override("font_size", 68)
+	title_label.add_theme_font_size_override("font_size", 58)
 	title_label.add_theme_color_override("font_color", Color(1.0, 0.94, 0.55))
-	subtitle_label.text = "Stabilize the pulse inside a psychedelic signal tunnel."
+	subtitle_label.text = "Hold the stabilizer. Crack the signal gate."
 	subtitle_label.add_theme_color_override("font_color", Color(0.68, 1.0, 0.98, 0.92))
-	signal_label.text = "ROTATE STABILIZER  /  CATCH PULSE  /  BREAK FRAGMENTS"
+	signal_label.text = "ROTATE  /  CATCH  /  BREACH"
 	signal_label.add_theme_color_override("font_color", Color(1.0, 0.2, 0.92, 0.92))
 	summary_label.add_theme_color_override("font_color", Color(0.9, 0.95, 1.0, 0.92))
 
@@ -144,8 +145,8 @@ func _apply_launch_deck_style() -> void:
 	_style_button(overdrive_button, Color(1.0, 0.05, 0.75, 0.95), Color(1.0, 0.96, 0.68, 1.0))
 	_style_button(tutorial_button, Color(0.98, 0.82, 0.12, 0.94), Color(0.08, 0.035, 0.0, 1.0))
 	_style_button(quit_button, Color(0.055, 0.035, 0.12, 0.92), Color(0.88, 0.9, 1.0, 0.9))
-	start_button.text = "STABILITY RUN"
-	overdrive_button.text = "OVERDRIVE"
+	start_button.text = "LAUNCH STABILITY"
+	overdrive_button.text = "ARM OVERDRIVE"
 	tutorial_button.text = "TUTORIAL"
 	quit_button.text = "EXIT"
 	_update_launch_deck_layout()
@@ -153,9 +154,28 @@ func _apply_launch_deck_style() -> void:
 func _update_launch_deck_layout() -> void:
 	if panel == null:
 		return
-	var available_width: float = maxf(size.x - PANEL_SAFE_MARGIN * 2.0, 320.0)
-	panel.custom_minimum_size.x = min(PANEL_MAX_WIDTH, available_width)
-	panel.custom_minimum_size.y = min(PANEL_MAX_HEIGHT, maxf(size.y - PANEL_SAFE_MARGIN * 2.0, 560.0))
+	var viewport_size := size
+	if center != null:
+		center.set_anchors_preset(Control.PRESET_FULL_RECT)
+		center.offset_left = 0.0
+		center.offset_top = 0.0
+		center.offset_right = 0.0
+		center.offset_bottom = 0.0
+	var available_width: float = maxf(viewport_size.x - PANEL_SAFE_MARGIN * 2.0, 320.0)
+	var panel_width: float = min(PANEL_MAX_WIDTH, available_width)
+	var panel_height: float = min(PANEL_MAX_HEIGHT, maxf(viewport_size.y - PANEL_SAFE_MARGIN * 2.0, 500.0))
+	panel.custom_minimum_size = Vector2(panel_width, panel_height)
+	panel.set_anchors_preset(Control.PRESET_TOP_LEFT)
+	var panel_x: float = PANEL_SAFE_MARGIN
+	if viewport_size.x >= 980.0:
+		panel_x = maxf(PANEL_SAFE_MARGIN, viewport_size.x * 0.075)
+	else:
+		panel_x = maxf(PANEL_SAFE_MARGIN, (viewport_size.x - panel_width) * 0.5)
+	var panel_y: float = maxf(PANEL_SAFE_MARGIN, (viewport_size.y - panel_height) * 0.5)
+	panel.offset_left = panel_x
+	panel.offset_top = panel_y
+	panel.offset_right = panel_x + panel_width
+	panel.offset_bottom = panel_y + panel_height
 	panel.scale = Vector2.ONE
 	if vbox != null:
 		vbox.set_anchors_preset(Control.PRESET_FULL_RECT)
@@ -164,6 +184,7 @@ func _update_launch_deck_layout() -> void:
 		vbox.offset_right = -PANEL_INSET
 		vbox.offset_bottom = -PANEL_INSET
 		vbox.alignment = BoxContainer.ALIGNMENT_CENTER
+		vbox.add_theme_constant_override("separation", 12)
 	_update_panel_pivot()
 	call_deferred("_update_panel_pivot")
 
@@ -173,9 +194,10 @@ func _update_panel_pivot() -> void:
 	panel.pivot_offset = panel.size * 0.5
 
 func _style_button(button: Button, fill: Color, font: Color) -> void:
-	button.custom_minimum_size = Vector2(340, 64)
+	button.custom_minimum_size = Vector2(360, 62)
+	button.size_flags_horizontal = Control.SIZE_SHRINK_CENTER
 	button.add_theme_color_override("font_color", font)
-	button.add_theme_font_size_override("font_size", 24)
+	button.add_theme_font_size_override("font_size", 22)
 	var normal := _button_style(fill, Color(1.0, 1.0, 1.0, 0.45))
 	var hover := _button_style(fill.lightened(0.12), Color(1.0, 1.0, 1.0, 0.85))
 	var pressed := _button_style(fill.darkened(0.14), Color(1.0, 0.96, 0.3, 0.95))

@@ -43,9 +43,9 @@ const SIGNAL_GATE_HIT_DURATION: float = 0.62
 const SIGNAL_GATE_SHARD_COUNT: int = 18
 const PADDLE_FLASH_DURATION: float = 0.18
 const HUD_DOCK_SAFE_MARGIN: float = 24.0
-const HUD_DOCK_MIN_WIDTH: float = 292.0
-const HUD_DOCK_MAX_WIDTH: float = 380.0
-const HUD_DOCK_HEIGHT: float = 166.0
+const HUD_DOCK_MIN_WIDTH: float = 304.0
+const HUD_DOCK_MAX_WIDTH: float = 420.0
+const HUD_DOCK_HEIGHT: float = 154.0
 const HUD_MESSAGE_HEIGHT: float = 62.0
 const PORTAL_BASE_ANIMATION_SPEED: float = 0.46
 const PORTAL_MAX_ANIMATION_SPEED: float = 1.85
@@ -1128,33 +1128,33 @@ func _apply_hud_style() -> void:
 	if hud_panel != null:
 		var hud_vbox := hud_panel.get_node_or_null("VBox") as VBoxContainer
 		if hud_vbox != null:
-			hud_vbox.add_theme_constant_override("separation", 2)
+			hud_vbox.add_theme_constant_override("separation", 1)
 		var panel_style := StyleBoxFlat.new()
-		panel_style.bg_color = Color(0.012, 0.0, 0.045, 0.80)
+		panel_style.bg_color = Color(0.008, 0.0, 0.04, 0.82)
 		panel_style.border_width_left = 2
 		panel_style.border_width_top = 2
 		panel_style.border_width_right = 2
 		panel_style.border_width_bottom = 2
-		panel_style.border_color = Color(0.0, 1.0, 0.9, 0.58)
-		panel_style.corner_radius_top_left = 18
-		panel_style.corner_radius_top_right = 18
-		panel_style.corner_radius_bottom_right = 18
-		panel_style.corner_radius_bottom_left = 18
-		panel_style.shadow_size = 18
-		panel_style.shadow_color = Color(0.75, 0.0, 1.0, 0.22)
-		panel_style.content_margin_left = 12.0
-		panel_style.content_margin_top = 8.0
-		panel_style.content_margin_right = 12.0
-		panel_style.content_margin_bottom = 8.0
+		panel_style.border_color = Color(0.0, 1.0, 0.9, 0.66)
+		panel_style.corner_radius_top_left = 16
+		panel_style.corner_radius_top_right = 16
+		panel_style.corner_radius_bottom_right = 16
+		panel_style.corner_radius_bottom_left = 16
+		panel_style.shadow_size = 16
+		panel_style.shadow_color = Color(0.75, 0.0, 1.0, 0.18)
+		panel_style.content_margin_left = 14.0
+		panel_style.content_margin_top = 9.0
+		panel_style.content_margin_right = 14.0
+		panel_style.content_margin_bottom = 9.0
 		hud_panel.add_theme_stylebox_override("panel", panel_style)
 	for label in [score_label, level_label, objective_label, style_label, phase_label, combo_label]:
 		if label == null:
 			continue
-		label.add_theme_font_size_override("font_size", 13)
+		label.add_theme_font_size_override("font_size", 12)
 		label.add_theme_color_override("font_color", Color(0.84, 1.0, 0.96, 0.94))
 		label.text_overrun_behavior = TextServer.OVERRUN_TRIM_ELLIPSIS
 		label.autowrap_mode = TextServer.AUTOWRAP_OFF
-	score_label.add_theme_font_size_override("font_size", 19)
+	score_label.add_theme_font_size_override("font_size", 20)
 	score_label.add_theme_color_override("font_color", Color(1.0, 0.9, 0.28))
 	objective_label.add_theme_color_override("font_color", Color(0.58, 1.0, 0.96, 0.96))
 	phase_label.add_theme_color_override("font_color", Color(1.0, 0.74, 0.25, 0.96))
@@ -1214,6 +1214,7 @@ func _build_tutorial_overlay() -> void:
 	_tutorial_continue_button.text = "CONTINUE"
 	_tutorial_continue_button.custom_minimum_size = Vector2(220, 46)
 	_tutorial_continue_button.add_theme_font_size_override("font_size", 18)
+	_apply_tutorial_button_style(_tutorial_continue_button)
 	_tutorial_continue_button.pressed.connect(_on_tutorial_continue_pressed)
 	box.add_child(_tutorial_continue_button)
 	$HUD.add_child(_tutorial_overlay)
@@ -1242,7 +1243,7 @@ func _layout_tutorial_overlay() -> void:
 
 static func hud_dock_rect_for_viewport(viewport_size: Vector2) -> Rect2:
 	var width: float = clampf(viewport_size.x - HUD_DOCK_SAFE_MARGIN * 2.0, HUD_DOCK_MIN_WIDTH, HUD_DOCK_MAX_WIDTH)
-	var height: float = minf(HUD_DOCK_HEIGHT, maxf(118.0, viewport_size.y * 0.22))
+	var height: float = minf(HUD_DOCK_HEIGHT, maxf(126.0, viewport_size.y * 0.20))
 	var x: float = (viewport_size.x - width) * 0.5
 	var y: float = maxf(HUD_DOCK_SAFE_MARGIN, viewport_size.y - HUD_DOCK_SAFE_MARGIN - height)
 	return Rect2(Vector2(x, y), Vector2(width, height))
@@ -1322,6 +1323,25 @@ func _apply_control_rect(control: Control, rect: Rect2) -> void:
 	control.offset_top = rect.position.y
 	control.offset_right = rect.position.x + rect.size.x
 	control.offset_bottom = rect.position.y + rect.size.y
+
+func _apply_tutorial_button_style(button: Button) -> void:
+	var normal := StyleBoxFlat.new()
+	normal.bg_color = Color(0.02, 0.96, 0.82, 0.96)
+	normal.border_width_left = 2
+	normal.border_width_top = 2
+	normal.border_width_right = 2
+	normal.border_width_bottom = 2
+	normal.border_color = Color(1.0, 1.0, 1.0, 0.42)
+	normal.corner_radius_top_left = 14
+	normal.corner_radius_top_right = 14
+	normal.corner_radius_bottom_right = 14
+	normal.corner_radius_bottom_left = 14
+	var hover := normal.duplicate() as StyleBoxFlat
+	hover.bg_color = Color(1.0, 0.86, 0.16, 0.96)
+	button.add_theme_color_override("font_color", Color(0.02, 0.08, 0.12, 1.0))
+	button.add_theme_stylebox_override("normal", normal)
+	button.add_theme_stylebox_override("hover", hover)
+	button.add_theme_stylebox_override("pressed", normal)
 
 func _show_tutorial_pause(title: String, body: String, focus: String, pause_kind: String) -> void:
 	if not _tutorial_enabled:
