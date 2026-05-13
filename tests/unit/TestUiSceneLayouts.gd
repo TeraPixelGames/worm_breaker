@@ -15,7 +15,7 @@ func test_main_menu_launch_deck_stays_inside_viewports() -> void:
 		assert_true(panel.position.y >= 0.0, "Main menu panel should stay inside top edge for %s" % viewport_size)
 		assert_true(panel.position.x + panel.size.x <= viewport_size.x, "Main menu panel should stay inside right edge for %s" % viewport_size)
 		assert_true(panel.position.y + panel.size.y <= viewport_size.y, "Main menu panel should stay inside bottom edge for %s" % viewport_size)
-		assert_equal((menu.get_node("Center/Panel/VBox/StartButton") as Button).text, "LAUNCH STABILITY", "Primary launch copy should be game-action text")
+		assert_equal((menu.get_node("Center/Panel/VBox/StartButton") as Button).text, "PRESS TO LAUNCH", "Primary launch copy should be cinematic prompt text")
 		menu.queue_free()
 		await get_tree().process_frame
 
