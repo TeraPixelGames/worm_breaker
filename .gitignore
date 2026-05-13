@@ -12,5 +12,7 @@
 # Local verification/capture output
 tmp/
 /tmp/
+artifacts/
+/artifacts/
 changes.patch
 
