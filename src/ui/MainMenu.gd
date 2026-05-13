@@ -2,6 +2,7 @@ extends Control
 
 const JULIA_SHADER: Shader = preload("res://src/shaders/fractals/julia_set.gdshader")
 
+@onready var kicker_label: Label = $Center/Panel/VBox/Kicker
 @onready var summary_label: Label = $Center/Panel/VBox/SummaryLabel
 @onready var center: Control = $Center
 @onready var panel: Panel = $Center/Panel
@@ -14,9 +15,9 @@ const JULIA_SHADER: Shader = preload("res://src/shaders/fractals/julia_set.gdsha
 @onready var tutorial_button: Button = $Center/Panel/VBox/TutorialButton
 @onready var quit_button: Button = $Center/Panel/VBox/QuitButton
 
-const PANEL_MAX_WIDTH: float = 560.0
-const PANEL_MAX_HEIGHT: float = 370.0
-const PANEL_SAFE_MARGIN: float = 52.0
+const PANEL_MAX_WIDTH: float = 640.0
+const PANEL_MAX_HEIGHT: float = 500.0
+const PANEL_SAFE_MARGIN: float = 56.0
 const PANEL_INSET: float = 8.0
 
 var _time := 0.0
@@ -133,21 +134,25 @@ func _build_fractal_backdrop() -> void:
 func _apply_launch_deck_style() -> void:
 	panel.add_theme_stylebox_override("panel", _panel_style(Color(0.0, 0.0, 0.0, 0.0), Color(0.0, 0.0, 0.0, 0.0), 0))
 
+	kicker_label.text = "SIGNAL TUNNEL ONLINE"
+	kicker_label.add_theme_font_size_override("font_size", 18)
+	kicker_label.add_theme_color_override("font_color", Color(0.16, 1.0, 0.9, 0.94))
+	kicker_label.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
 	title_label.text = "WORM BREAKER"
-	title_label.add_theme_font_size_override("font_size", 70)
+	title_label.add_theme_font_size_override("font_size", 68)
 	title_label.add_theme_color_override("font_color", Color(1.0, 0.94, 0.55))
-	title_label.horizontal_alignment = HORIZONTAL_ALIGNMENT_LEFT
+	title_label.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
 	subtitle_label.text = "Hold the stabilizer. Crack the signal gate."
-	subtitle_label.add_theme_font_size_override("font_size", 25)
+	subtitle_label.add_theme_font_size_override("font_size", 24)
 	subtitle_label.add_theme_color_override("font_color", Color(0.68, 1.0, 0.98, 0.92))
-	subtitle_label.horizontal_alignment = HORIZONTAL_ALIGNMENT_LEFT
-	signal_label.text = "SIGNAL TUNNEL ONLINE"
-	signal_label.add_theme_font_size_override("font_size", 20)
-	signal_label.add_theme_color_override("font_color", Color(0.16, 1.0, 0.9, 0.94))
-	signal_label.horizontal_alignment = HORIZONTAL_ALIGNMENT_LEFT
-	summary_label.add_theme_font_size_override("font_size", 17)
+	subtitle_label.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+	signal_label.text = "ROTATE  /  CATCH  /  BREACH"
+	signal_label.add_theme_font_size_override("font_size", 17)
+	signal_label.add_theme_color_override("font_color", Color(1.0, 0.2, 0.92, 0.92))
+	signal_label.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+	summary_label.add_theme_font_size_override("font_size", 16)
 	summary_label.add_theme_color_override("font_color", Color(0.9, 0.95, 1.0, 0.92))
-	summary_label.horizontal_alignment = HORIZONTAL_ALIGNMENT_LEFT
+	summary_label.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
 
 	_style_button(start_button, Color(0.02, 1.0, 0.82, 0.95), Color(0.02, 0.08, 0.12, 1.0))
 	_style_secondary_button(overdrive_button, Color(0.08, 0.0, 0.16, 0.84), Color(1.0, 0.82, 0.98, 0.96), Color(1.0, 0.05, 0.75, 0.58))
@@ -163,6 +168,12 @@ func _update_launch_deck_layout() -> void:
 	if panel == null:
 		return
 	var viewport_size := size
+	var visible_size := get_viewport().get_visible_rect().size
+	var window_size := Vector2(DisplayServer.window_get_size())
+	viewport_size.x = maxf(viewport_size.x, visible_size.x)
+	viewport_size.y = maxf(viewport_size.y, visible_size.y)
+	viewport_size.x = maxf(viewport_size.x, window_size.x)
+	viewport_size.y = maxf(viewport_size.y, window_size.y)
 	if center != null:
 		center.set_anchors_preset(Control.PRESET_FULL_RECT)
 		center.offset_left = 0.0
@@ -175,12 +186,10 @@ func _update_launch_deck_layout() -> void:
 	var panel_height: float = min(PANEL_MAX_HEIGHT, maxf(viewport_size.y - safe_margin * 2.0, 320.0))
 	panel.custom_minimum_size = Vector2(panel_width, panel_height)
 	panel.set_anchors_preset(Control.PRESET_TOP_LEFT)
-	var panel_x: float = safe_margin
-	if viewport_size.x >= 980.0 and viewport_size.y < viewport_size.x:
-		panel_x = maxf(safe_margin, viewport_size.x * 0.075)
-	else:
-		panel_x = maxf(safe_margin, (viewport_size.x - panel_width) * 0.5)
+	var panel_x: float = maxf(safe_margin, (viewport_size.x - panel_width) * 0.5)
 	var panel_y: float = maxf(safe_margin, viewport_size.y - panel_height - safe_margin)
+	if viewport_size.x >= 980.0 and viewport_size.y < viewport_size.x:
+		panel_y = maxf(safe_margin, viewport_size.y - panel_height - safe_margin * 0.72)
 	panel.offset_left = panel_x
 	panel.offset_top = panel_y
 	panel.offset_right = panel_x + panel_width
@@ -192,8 +201,8 @@ func _update_launch_deck_layout() -> void:
 		vbox.offset_top = PANEL_INSET
 		vbox.offset_right = -PANEL_INSET
 		vbox.offset_bottom = -PANEL_INSET
-		vbox.alignment = BoxContainer.ALIGNMENT_END
-		vbox.add_theme_constant_override("separation", 10)
+		vbox.alignment = BoxContainer.ALIGNMENT_CENTER
+		vbox.add_theme_constant_override("separation", 9)
 	_update_panel_pivot()
 	call_deferred("_update_panel_pivot")
 
@@ -203,8 +212,8 @@ func _update_panel_pivot() -> void:
 	panel.pivot_offset = panel.size * 0.5
 
 func _style_button(button: Button, fill: Color, font: Color) -> void:
-	button.custom_minimum_size = Vector2(424, 76)
-	button.size_flags_horizontal = Control.SIZE_SHRINK_BEGIN
+	button.custom_minimum_size = Vector2(430, 68)
+	button.size_flags_horizontal = Control.SIZE_SHRINK_CENTER
 	button.add_theme_color_override("font_color", font)
 	button.add_theme_font_size_override("font_size", 26)
 	var normal := _button_style(fill, Color(1.0, 1.0, 1.0, 0.45))
@@ -215,8 +224,8 @@ func _style_button(button: Button, fill: Color, font: Color) -> void:
 	button.add_theme_stylebox_override("pressed", pressed)
 
 func _style_secondary_button(button: Button, fill: Color, font: Color, stroke: Color) -> void:
-	button.custom_minimum_size = Vector2(230, 50)
-	button.size_flags_horizontal = Control.SIZE_SHRINK_BEGIN
+	button.custom_minimum_size = Vector2(230, 42)
+	button.size_flags_horizontal = Control.SIZE_SHRINK_CENTER
 	button.add_theme_color_override("font_color", font)
 	button.add_theme_font_size_override("font_size", 18)
 	var normal := _button_style(fill, stroke)
@@ -237,8 +246,11 @@ func _panel_style(fill: Color, stroke: Color, radius: int) -> StyleBoxFlat:
 	style.corner_radius_top_right = radius
 	style.corner_radius_bottom_right = radius
 	style.corner_radius_bottom_left = radius
-	style.shadow_color = Color(0.0, 0.0, 0.0, 0.5)
-	style.shadow_size = 26
+	if fill.a <= 0.0 and stroke.a <= 0.0:
+		style.shadow_size = 0
+	else:
+		style.shadow_color = Color(0.0, 0.0, 0.0, 0.5)
+		style.shadow_size = 26
 	return style
 
 func _button_style(fill: Color, stroke: Color) -> StyleBoxFlat:
