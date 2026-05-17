@@ -1479,6 +1479,15 @@ static func _analyzer_has_method(analyzer: Object, method_name: StringName) -> b
 		return false
 	if analyzer.has_method(method_name):
 		return true
+	if OS.get_name() == "Android" and method_name in [
+		&"request_capture",
+		&"is_available",
+		&"is_permission_pending",
+		&"get_energy",
+		&"get_pulse",
+		&"stop"
+	]:
+		return true
 	if analyzer.has_method("has_java_method"):
 		return bool(analyzer.call("has_java_method", method_name))
 	return false
