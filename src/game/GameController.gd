@@ -71,7 +71,9 @@ const GAME_AUDIO_SPECTRUM_MIN_HZ: float = 40.0
 const GAME_AUDIO_SPECTRUM_MAX_HZ: float = 190.0
 const GAME_AUDIO_ENERGY_GAIN: float = 1.65
 const MIC_AUDIO_CAPTURE_BUS := "MicCapture"
-const MIC_AUDIO_ENERGY_GAIN: float = 2.8
+const MIC_AUDIO_RMS_GAIN: float = 9.0
+const MIC_AUDIO_PEAK_GAIN: float = 3.5
+const MIC_AUDIO_PULSE_BOOST: float = 1.8
 const ANDROID_SYSTEM_AUDIO_FALLBACK_DELAY: float = 2.5
 const STYLE_STABILITY := "stability"
 const STYLE_OVERDRIVE := "overdrive"
@@ -141,6 +143,7 @@ var _device_audio_source_label: String = DEVICE_AUDIO_SOURCE_SYSTEM
 var _android_system_audio_wait_time: float = 0.0
 var _mic_audio_player: AudioStreamPlayer
 var _mic_audio_capture_effect_index: int = -1
+var _mic_audio_mute_effect_index: int = -1
 var _mic_audio_capture_instance: AudioEffectCapture
 var _game_audio_spectrum_effect_index: int = -1
 var _game_audio_spectrum_instance: AudioEffectSpectrumAnalyzerInstance
@@ -1374,9 +1377,13 @@ static func mic_audio_energy_from_frames(frames: PackedVector2Array) -> float:
 	if frames.is_empty():
 		return 0.0
 	var sum := 0.0
+	var peak := 0.0
 	for frame in frames:
-		sum += frame.length_squared() * 0.5
-	return clampf(sqrt(sum / float(frames.size())) * MIC_AUDIO_ENERGY_GAIN, 0.0, 1.0)
+		var mono := maxf(absf(frame.x), absf(frame.y))
+		sum += mono * mono
+		peak = maxf(peak, mono)
+	var rms := sqrt(sum / float(frames.size()))
+	return clampf(maxf(rms * MIC_AUDIO_RMS_GAIN, peak * MIC_AUDIO_PEAK_GAIN), 0.0, 1.0)
 
 static func signal_gate_hit_strength(hit_timer: float) -> float:
 	return clampf(hit_timer / SIGNAL_GATE_HIT_DURATION, 0.0, 1.0)
@@ -1461,18 +1468,23 @@ func _setup_mic_audio_fallback() -> void:
 		bus_index = AudioServer.get_bus_count()
 		AudioServer.add_bus(bus_index)
 		AudioServer.set_bus_name(bus_index, MIC_AUDIO_CAPTURE_BUS)
-	AudioServer.set_bus_volume_db(bus_index, -80.0)
+	AudioServer.set_bus_volume_db(bus_index, 0.0)
 	var effect := AudioEffectCapture.new()
 	effect.resource_name = "WormBreakerMicAudioPulse"
 	effect.buffer_length = 0.25
 	_mic_audio_capture_effect_index = AudioServer.get_bus_effect_count(bus_index)
 	AudioServer.add_bus_effect(bus_index, effect, _mic_audio_capture_effect_index)
 	_mic_audio_capture_instance = AudioServer.get_bus_effect(bus_index, _mic_audio_capture_effect_index) as AudioEffectCapture
+	var mute_effect := AudioEffectAmplify.new()
+	mute_effect.resource_name = "WormBreakerMicAudioMute"
+	mute_effect.volume_db = -80.0
+	_mic_audio_mute_effect_index = AudioServer.get_bus_effect_count(bus_index)
+	AudioServer.add_bus_effect(bus_index, mute_effect, _mic_audio_mute_effect_index)
 	_mic_audio_player = AudioStreamPlayer.new()
 	_mic_audio_player.name = "MicAudioPulseInput"
 	_mic_audio_player.stream = AudioStreamMicrophone.new()
 	_mic_audio_player.bus = MIC_AUDIO_CAPTURE_BUS
-	_mic_audio_player.volume_db = -80.0
+	_mic_audio_player.volume_db = 0.0
 	add_child(_mic_audio_player)
 	_mic_audio_player.play()
 
@@ -1481,13 +1493,16 @@ func _teardown_mic_audio_fallback() -> void:
 		_mic_audio_player.stop()
 		_mic_audio_player.queue_free()
 	_mic_audio_player = null
-	if _mic_audio_capture_effect_index < 0:
+	if _mic_audio_capture_effect_index < 0 and _mic_audio_mute_effect_index < 0:
 		_mic_audio_capture_instance = null
 		return
 	var bus_index := AudioServer.get_bus_index(MIC_AUDIO_CAPTURE_BUS)
-	if bus_index >= 0 and _mic_audio_capture_effect_index < AudioServer.get_bus_effect_count(bus_index):
-		AudioServer.remove_bus_effect(bus_index, _mic_audio_capture_effect_index)
+	if bus_index >= 0:
+		for effect_index in [_mic_audio_mute_effect_index, _mic_audio_capture_effect_index]:
+			if effect_index >= 0 and effect_index < AudioServer.get_bus_effect_count(bus_index):
+				AudioServer.remove_bus_effect(bus_index, effect_index)
 	_mic_audio_capture_effect_index = -1
+	_mic_audio_mute_effect_index = -1
 	_mic_audio_capture_instance = null
 
 func _setup_game_audio_spectrum_fallback() -> void:
@@ -1562,7 +1577,7 @@ func _mic_audio_pulse_state(delta: float) -> Dictionary:
 		}
 	var frames := _mic_audio_capture_instance.get_buffer(mini(available_frames, 2048))
 	var energy := mic_audio_energy_from_frames(frames)
-	var target_pulse := device_audio_pulse_target(energy, _device_audio_energy)
+	var target_pulse := clampf(device_audio_pulse_target(energy, _device_audio_energy) * MIC_AUDIO_PULSE_BOOST, 0.0, DEVICE_AUDIO_PULSE_MAX)
 	return {
 		"available": true,
 		"energy": energy,

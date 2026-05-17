@@ -67,3 +67,8 @@ func test_mic_audio_frames_map_to_bounded_energy() -> void:
 	var energy: float = GameController.mic_audio_energy_from_frames(frames)
 	assert_true(energy > 0.0, "Mic frames should produce fallback energy")
 	assert_true(energy <= 1.0, "Mic fallback energy should stay bounded")
+
+func test_quiet_mic_audio_still_registers_small_energy() -> void:
+	var frames := PackedVector2Array([Vector2(0.01, 0.0), Vector2(0.0, -0.012)])
+	var energy: float = GameController.mic_audio_energy_from_frames(frames)
+	assert_true(energy > 0.02, "Quiet mic input should be scaled high enough to show in the debug meter")
