@@ -38,7 +38,11 @@ if(WIN32)
 elseif(ANDROID)
 	set(SYSTEM_AUDIO_PLATFORM "android")
 	set(SYSTEM_AUDIO_ARCH "arm64")
-	target_link_libraries(system_audio_pulse PRIVATE c++_shared)
+	target_link_libraries(system_audio_pulse PRIVATE c++_static c++abi)
+	target_link_options(system_audio_pulse PRIVATE
+		"-Wl,-z,max-page-size=16384"
+		"-Wl,-z,common-page-size=16384"
+	)
 elseif(IOS)
 	set(SYSTEM_AUDIO_PLATFORM "ios")
 	set(SYSTEM_AUDIO_ARCH "arm64")

@@ -37,7 +37,7 @@ $ConfigureArgs = @(
 	"-DCMAKE_TOOLCHAIN_FILE=$Toolchain",
 	"-DANDROID_ABI=$Abi",
 	"-DANDROID_PLATFORM=android-29",
-	"-DANDROID_STL=c++_shared"
+	"-DANDROID_STL=c++_static"
 )
 if ($Generator -eq "NMake Makefiles") {
 	$ConfigureArgs += "-DCMAKE_BUILD_TYPE=$Config"

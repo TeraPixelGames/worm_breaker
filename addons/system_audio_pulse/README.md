@@ -58,7 +58,7 @@ The script uses Ninja Multi-Config when Visual Studio's bundled Ninja is availab
 .\build-android.ps1 -Config Debug -Jobs 24
 ```
 
-The Android shared libraries are written to:
+The Android build statically links libc++ and uses 16 KB ELF LOAD segment alignment for Android 15+ compatibility. The shared libraries are written to:
 
 ```text
 addons/system_audio_pulse/bin/libsystem_audio_pulse.android.template_debug.arm64.so
