@@ -31,6 +31,10 @@ AdManager="*res://addons/arcade_core/AdManager.gd"
 
 driver/enable_input=true
 
+[editor_plugins]
+
+enabled=PackedStringArray("res://addons/android_system_audio_capture/plugin.cfg")
+
 [display]
 
 window/size/viewport_width=1080
