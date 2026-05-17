@@ -53,6 +53,10 @@ func test_device_audio_debug_text_can_report_bpm() -> void:
 	var text: String = GameController.device_audio_debug_text(true, 0.12345, 0.678, GameController.DEVICE_AUDIO_SOURCE_SYSTEM, 128.0, 0.7)
 	assert_equal(text, "SYS AUDIO ON  E 0.1235  P 0.68  BPM 128  C 0.70", "Debug readout should expose detected audio BPM")
 
+func test_device_audio_debug_text_can_report_tunnel_speed() -> void:
+	var text: String = GameController.device_audio_debug_text(true, 0.12345, 0.678, GameController.DEVICE_AUDIO_SOURCE_SYSTEM, 128.0, 0.7, 1.75)
+	assert_equal(text, "SYS AUDIO ON  E 0.1235  P 0.68  BPM 128  C 0.70  S 1.75", "Debug readout should expose BPM-driven tunnel speed")
+
 func test_game_audio_debug_text_reports_fallback_source() -> void:
 	var text: String = GameController.device_audio_debug_text(true, 0.2, 0.4, GameController.DEVICE_AUDIO_SOURCE_GAME)
 	assert_equal(text, "GAME AUDIO ON  E 0.2000  P 0.40", "Debug readout should identify the mobile game-audio fallback")
