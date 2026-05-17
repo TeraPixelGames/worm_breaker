@@ -1457,7 +1457,7 @@ static func smoothed_device_audio_pulse(current_pulse: float, target_pulse: floa
 	return lerpf(clampf(current_pulse, 0.0, DEVICE_AUDIO_PULSE_MAX), clampf(target_pulse, 0.0, DEVICE_AUDIO_PULSE_MAX), clampf(weight, 0.0, 1.0))
 
 static func device_audio_pulse_for_analyzer(analyzer: Object, current_pulse: float, previous_energy: float, delta: float) -> Dictionary:
-	if analyzer == null or not analyzer.has_method("is_available") or not bool(analyzer.call("is_available")) or not analyzer.has_method("get_energy"):
+	if analyzer == null or not _analyzer_has_method(analyzer, "is_available") or not bool(analyzer.call("is_available")) or not _analyzer_has_method(analyzer, "get_energy"):
 		return {
 			"available": false,
 			"energy": 0.0,
@@ -1465,7 +1465,7 @@ static func device_audio_pulse_for_analyzer(analyzer: Object, current_pulse: flo
 		}
 	var energy := maxf(float(analyzer.call("get_energy")), 0.0)
 	var native_pulse := 0.0
-	if analyzer.has_method("get_pulse"):
+	if _analyzer_has_method(analyzer, "get_pulse"):
 		native_pulse = clampf(float(analyzer.call("get_pulse")), 0.0, DEVICE_AUDIO_PULSE_MAX)
 	var target_pulse := maxf(device_audio_pulse_target(energy, previous_energy), native_pulse)
 	return {
@@ -1473,6 +1473,15 @@ static func device_audio_pulse_for_analyzer(analyzer: Object, current_pulse: flo
 		"energy": energy,
 		"pulse": smoothed_device_audio_pulse(current_pulse, target_pulse, delta)
 	}
+
+static func _analyzer_has_method(analyzer: Object, method_name: StringName) -> bool:
+	if analyzer == null:
+		return false
+	if analyzer.has_method(method_name):
+		return true
+	if analyzer.has_method("has_java_method"):
+		return bool(analyzer.call("has_java_method", method_name))
+	return false
 
 static func device_audio_debug_text(available: bool, energy: float, pulse: float, source_label: String = DEVICE_AUDIO_SOURCE_SYSTEM, bpm: float = -1.0, bpm_confidence: float = 0.0, tunnel_speed: float = -1.0) -> String:
 	var text := "%s %s  E %.4f  P %.2f" % [
@@ -1597,7 +1606,7 @@ func _setup_android_system_audio_capture() -> void:
 		_setup_mic_audio_fallback()
 		return
 	_device_audio_analyzer = analyzer
-	if _device_audio_analyzer.has_method("request_capture"):
+	if _analyzer_has_method(_device_audio_analyzer, "request_capture"):
 		print("Requesting Android system audio capture")
 		_device_audio_analyzer.call("request_capture")
 
@@ -1678,12 +1687,12 @@ func _step_device_audio_pulse(delta: float) -> void:
 		next_state = device_audio_pulse_for_analyzer(_device_audio_analyzer, _device_audio_pulse, _device_audio_energy, delta)
 		if not bool(next_state.get("available", false)) and OS.get_name() == "Android":
 			var permission_pending := false
-			if _device_audio_analyzer.has_method("is_permission_pending"):
+			if _analyzer_has_method(_device_audio_analyzer, "is_permission_pending"):
 				permission_pending = bool(_device_audio_analyzer.call("is_permission_pending"))
 			if not permission_pending:
 				_android_system_audio_wait_time += delta
 			if _android_system_audio_wait_time >= ANDROID_SYSTEM_AUDIO_FALLBACK_DELAY:
-				if _device_audio_analyzer.has_method("stop"):
+				if _analyzer_has_method(_device_audio_analyzer, "stop"):
 					_device_audio_analyzer.call("stop")
 				_device_audio_analyzer = null
 				_setup_mic_audio_fallback()
