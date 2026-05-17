@@ -53,6 +53,15 @@ const PORTAL_SPEED_ACCELERATION: float = 0.85
 const TUNNEL_TEXTURE_BASE_SPEED: float = 0.62
 const TUNNEL_TEXTURE_MAX_SPEED: float = 2.6
 const TUNNEL_TEXTURE_SPEED_ACCELERATION: float = 1.1
+const DEVICE_AUDIO_ANALYZER_CLASS := "WindowsSystemAudioAnalyzer"
+const DEVICE_AUDIO_DISABLE_ENV := "WORM_BREAKER_DISABLE_SYSTEM_AUDIO_PULSE"
+const DEVICE_AUDIO_PULSE_THRESHOLD: float = 0.003
+const DEVICE_AUDIO_PULSE_ONSET_THRESHOLD: float = 0.002
+const DEVICE_AUDIO_PULSE_LEVEL_GAIN: float = 14.0
+const DEVICE_AUDIO_PULSE_ONSET_GAIN: float = 32.0
+const DEVICE_AUDIO_PULSE_ATTACK: float = 32.0
+const DEVICE_AUDIO_PULSE_DECAY: float = 6.8
+const DEVICE_AUDIO_PULSE_MAX: float = 1.0
 const STYLE_STABILITY := "stability"
 const STYLE_OVERDRIVE := "overdrive"
 const POWERUP_WIDE := "WIDE"
@@ -112,6 +121,11 @@ var _rival_target: int = 1200
 var _tunnel_material: ShaderMaterial
 var _tunnel_texture_phase: float = 0.0
 var _tunnel_texture_speed: float = TUNNEL_TEXTURE_BASE_SPEED
+var _device_audio_analyzer: RefCounted
+var _device_audio_available: bool = false
+var _device_audio_energy: float = 0.0
+var _device_audio_pulse: float = 0.0
+var _device_audio_debug_label: Label
 var _ball_material: StandardMaterial3D
 var _paddle_materials: Array[StandardMaterial3D] = []
 var _ball_trail_root: Node3D
@@ -171,9 +185,15 @@ func _ready() -> void:
 	_build_powerup_root()
 	_build_tutorial_overlay()
 	_build_tunnel_end_portal()
+	_build_device_audio_debug_label()
+	_setup_device_audio_analyzer()
 	_build_paddle_segments()
 	_load_level(max(1, RunManager.current_level_index))
 	_update_hud()
+
+func _exit_tree() -> void:
+	if _device_audio_analyzer != null and _device_audio_analyzer.has_method("stop"):
+		_device_audio_analyzer.call("stop")
 
 func _notification(what: int) -> void:
 	if what == NOTIFICATION_WM_SIZE_CHANGED:
@@ -185,6 +205,7 @@ func _physics_process(delta: float) -> void:
 	_signal_gate_hit_timer = maxf(_signal_gate_hit_timer - delta, 0.0)
 	_step_portal_motion(delta)
 	_step_tunnel_texture_motion(delta)
+	_step_device_audio_pulse(delta)
 	_update_psychedelic_materials()
 	_update_fractal_overlay()
 	_update_impact_particles(delta)
@@ -448,6 +469,7 @@ func _refresh_tunnel_visual() -> void:
 	tunnel_material.set_shader_parameter("tunnel_phase", _tunnel_texture_phase)
 	tunnel_material.set_shader_parameter("intensity", 0.86)
 	tunnel_material.set_shader_parameter("hue_shift", 0.0)
+	tunnel_material.set_shader_parameter("device_audio_pulse", _device_audio_pulse)
 	tunnel_material.set_shader_parameter("base_color", Color(0.018, 0.0, 0.055, 1.0))
 	tunnel_material.set_shader_parameter("near_color", Color(0.0, 0.9, 0.95, 1.0))
 	tunnel_material.set_shader_parameter("far_color", Color(1.0, 0.1, 0.95, 1.0))
@@ -1085,8 +1107,9 @@ func _update_psychedelic_materials() -> void:
 	if _tunnel_material != null:
 		var hue := fmod(0.76 + sin(_visual_time * 0.17) * 0.08, 1.0)
 		var pulse := 0.5 + 0.5 * sin(_visual_time * 0.9)
+		var audio_intensity := _device_audio_pulse * 0.92
 		_tunnel_material.set_shader_parameter("hue_shift", hue)
-		_tunnel_material.set_shader_parameter("intensity", 0.78 + pulse * 0.26)
+		_tunnel_material.set_shader_parameter("intensity", 0.78 + pulse * 0.26 + audio_intensity)
 		_tunnel_material.set_shader_parameter("near_color", Color.from_hsv(fmod(hue + 0.48, 1.0), 0.74, 1.0))
 		_tunnel_material.set_shader_parameter("far_color", Color.from_hsv(fmod(hue + 0.12, 1.0), 0.92, 1.0))
 	if _ball_material != null:
@@ -1229,6 +1252,17 @@ func _layout_hud() -> void:
 	if message_label != null:
 		_apply_control_rect(message_label, hud_message_rect_for_viewport(viewport_size))
 	_layout_tutorial_overlay()
+	_layout_device_audio_debug_label()
+
+func _layout_device_audio_debug_label() -> void:
+	if _device_audio_debug_label == null:
+		return
+	var viewport_size: Vector2 = get_viewport().get_visible_rect().size
+	var height := 30.0
+	var width: float = clampf(viewport_size.x - HUD_DOCK_SAFE_MARGIN * 2.0, 320.0, 560.0)
+	var x := HUD_DOCK_SAFE_MARGIN
+	var y := maxf(HUD_DOCK_SAFE_MARGIN, viewport_size.y - HUD_DOCK_SAFE_MARGIN - height)
+	_apply_control_rect(_device_audio_debug_label, Rect2(Vector2(x, y), Vector2(width, height)))
 
 func _layout_tutorial_overlay() -> void:
 	if _tutorial_overlay == null:
@@ -1275,6 +1309,43 @@ static func smoothed_tunnel_texture_speed(current_speed: float, target_speed: fl
 	var weight: float = 1.0 - exp(-TUNNEL_TEXTURE_SPEED_ACCELERATION * maxf(delta, 0.0))
 	return lerpf(current_speed, target_speed, clampf(weight, 0.0, 1.0))
 
+static func device_audio_pulse_target(energy: float, previous_energy: float) -> float:
+	var safe_energy := maxf(energy, 0.0)
+	var safe_previous := maxf(previous_energy, 0.0)
+	var level_pulse := maxf(safe_energy - DEVICE_AUDIO_PULSE_THRESHOLD, 0.0) * DEVICE_AUDIO_PULSE_LEVEL_GAIN
+	var onset_pulse := maxf((safe_energy - safe_previous) - DEVICE_AUDIO_PULSE_ONSET_THRESHOLD, 0.0) * DEVICE_AUDIO_PULSE_ONSET_GAIN
+	return clampf(maxf(level_pulse, onset_pulse), 0.0, DEVICE_AUDIO_PULSE_MAX)
+
+static func smoothed_device_audio_pulse(current_pulse: float, target_pulse: float, delta: float) -> float:
+	var rate := DEVICE_AUDIO_PULSE_ATTACK if target_pulse > current_pulse else DEVICE_AUDIO_PULSE_DECAY
+	var weight: float = 1.0 - exp(-rate * maxf(delta, 0.0))
+	return lerpf(clampf(current_pulse, 0.0, DEVICE_AUDIO_PULSE_MAX), clampf(target_pulse, 0.0, DEVICE_AUDIO_PULSE_MAX), clampf(weight, 0.0, 1.0))
+
+static func device_audio_pulse_for_analyzer(analyzer: Object, current_pulse: float, previous_energy: float, delta: float) -> Dictionary:
+	if analyzer == null or not analyzer.has_method("is_available") or not bool(analyzer.call("is_available")) or not analyzer.has_method("get_energy"):
+		return {
+			"available": false,
+			"energy": 0.0,
+			"pulse": smoothed_device_audio_pulse(current_pulse, 0.0, delta)
+		}
+	var energy := maxf(float(analyzer.call("get_energy")), 0.0)
+	var native_pulse := 0.0
+	if analyzer.has_method("get_pulse"):
+		native_pulse = clampf(float(analyzer.call("get_pulse")), 0.0, DEVICE_AUDIO_PULSE_MAX)
+	var target_pulse := maxf(device_audio_pulse_target(energy, previous_energy), native_pulse)
+	return {
+		"available": true,
+		"energy": energy,
+		"pulse": smoothed_device_audio_pulse(current_pulse, target_pulse, delta)
+	}
+
+static func device_audio_debug_text(available: bool, energy: float, pulse: float) -> String:
+	return "SYS AUDIO %s  E %.4f  P %.2f" % [
+		"ON" if available else "OFF",
+		maxf(energy, 0.0),
+		clampf(pulse, 0.0, DEVICE_AUDIO_PULSE_MAX)
+	]
+
 static func signal_gate_hit_strength(hit_timer: float) -> float:
 	return clampf(hit_timer / SIGNAL_GATE_HIT_DURATION, 0.0, 1.0)
 
@@ -1313,6 +1384,43 @@ func _step_tunnel_texture_motion(delta: float) -> void:
 	_tunnel_texture_speed = smoothed_tunnel_texture_speed(_tunnel_texture_speed, target_speed, delta)
 	_tunnel_texture_phase = fmod(_tunnel_texture_phase + delta * _tunnel_texture_speed, 10000.0)
 	_tunnel_material.set_shader_parameter("tunnel_phase", _tunnel_texture_phase)
+
+func _setup_device_audio_analyzer() -> void:
+	if OS.get_name() != "Windows":
+		return
+	if OS.get_environment(DEVICE_AUDIO_DISABLE_ENV) == "1":
+		return
+	if not ClassDB.class_exists(DEVICE_AUDIO_ANALYZER_CLASS):
+		return
+	var analyzer := ClassDB.instantiate(DEVICE_AUDIO_ANALYZER_CLASS) as RefCounted
+	if analyzer == null:
+		return
+	_device_audio_analyzer = analyzer
+	if _device_audio_analyzer.has_method("start"):
+		_device_audio_analyzer.call("start")
+
+func _step_device_audio_pulse(delta: float) -> void:
+	var next_state := device_audio_pulse_for_analyzer(_device_audio_analyzer, _device_audio_pulse, _device_audio_energy, delta)
+	_device_audio_available = bool(next_state.get("available", false))
+	_device_audio_energy = float(next_state.get("energy", 0.0))
+	_device_audio_pulse = float(next_state.get("pulse", 0.0))
+	if _tunnel_material != null:
+		_tunnel_material.set_shader_parameter("device_audio_pulse", _device_audio_pulse)
+
+func _build_device_audio_debug_label() -> void:
+	_device_audio_debug_label = Label.new()
+	_device_audio_debug_label.name = "DeviceAudioDebugLabel"
+	_device_audio_debug_label.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	_device_audio_debug_label.text = device_audio_debug_text(false, 0.0, 0.0)
+	_device_audio_debug_label.horizontal_alignment = HORIZONTAL_ALIGNMENT_LEFT
+	_device_audio_debug_label.vertical_alignment = VERTICAL_ALIGNMENT_BOTTOM
+	_device_audio_debug_label.add_theme_font_size_override("font_size", 20)
+	_device_audio_debug_label.add_theme_color_override("font_color", Color(0.0, 1.0, 0.82, 0.94))
+	_device_audio_debug_label.add_theme_color_override("font_shadow_color", Color(0.0, 0.0, 0.0, 0.82))
+	_device_audio_debug_label.add_theme_constant_override("shadow_offset_x", 2)
+	_device_audio_debug_label.add_theme_constant_override("shadow_offset_y", 2)
+	$HUD.add_child(_device_audio_debug_label)
+	_layout_device_audio_debug_label()
 
 func _apply_control_rect(control: Control, rect: Rect2) -> void:
 	control.anchor_left = 0.0
@@ -1528,6 +1636,8 @@ func _update_hud() -> void:
 		phase = "PRESSURE PEAK"
 	phase_label.text = "%s  %d/%d" % [phase, destroyed, _initial_brick_count]
 	combo_label.text = hud_pulse_text(_chain_combo)
+	if _device_audio_debug_label != null:
+		_device_audio_debug_label.text = device_audio_debug_text(_device_audio_available, _device_audio_energy, _device_audio_pulse)
 
 func _powerup_status_text() -> String:
 	var parts: Array[String] = []

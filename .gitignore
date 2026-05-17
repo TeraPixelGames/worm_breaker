@@ -16,3 +16,13 @@ artifacts/
 /artifacts/
 changes.patch
 
+# Native extension build outputs
+/addons/system_audio_pulse/build*/
+/addons/system_audio_pulse/system_audio_pulse.gdextension
+/addons/system_audio_pulse/system_audio_pulse.gdextension.uid
+/addons/system_audio_pulse/bin/Release/
+/addons/system_audio_pulse/bin/*.dll
+/addons/system_audio_pulse/bin/*.lib
+/addons/system_audio_pulse/bin/*.exp
+/addons/system_audio_pulse/bin/*.pdb
+

@@ -1,0 +1,50 @@
+extends "res://tests/framework/TestCase.gd"
+
+const GameController: Script = preload("res://src/game/GameController.gd")
+
+class DummyAnalyzer:
+	extends RefCounted
+
+	var available := true
+	var energy := 0.0
+	var pulse := 0.0
+
+	func is_available() -> bool:
+		return available
+
+	func get_energy() -> float:
+		return energy
+
+	func get_pulse() -> float:
+		return pulse
+
+func test_device_audio_low_energy_stays_neutral() -> void:
+	var target: float = GameController.device_audio_pulse_target(0.001, 0.0008)
+	assert_true(target <= 0.001, "Low system audio energy should not trigger tunnel pulse")
+
+func test_device_audio_energy_rise_triggers_bounded_pulse() -> void:
+	var target: float = GameController.device_audio_pulse_target(0.15, 0.02)
+	assert_true(target > 0.0, "Sudden system audio energy should trigger tunnel pulse")
+	assert_true(target <= 1.0, "System audio pulse target should stay bounded")
+
+func test_device_audio_pulse_decays_smoothly() -> void:
+	var next_pulse: float = GameController.smoothed_device_audio_pulse(1.0, 0.0, 1.0 / 60.0)
+	assert_true(next_pulse < 1.0, "System audio pulse should decay toward silence")
+	assert_true(next_pulse > 0.0, "System audio pulse should not snap off in one frame")
+
+func test_missing_device_audio_analyzer_returns_neutral_pulse() -> void:
+	var state: Dictionary = GameController.device_audio_pulse_for_analyzer(null, 0.5, 0.2, 1.0 / 60.0)
+	assert_equal(float(state.get("energy", -1.0)), 0.0, "Missing analyzer should report neutral energy")
+	assert_true(float(state.get("pulse", 0.0)) < 0.5, "Missing analyzer should decay current pulse")
+
+func test_available_device_audio_analyzer_uses_energy_and_native_pulse() -> void:
+	var analyzer := DummyAnalyzer.new()
+	analyzer.energy = 0.08
+	analyzer.pulse = 0.65
+	var state: Dictionary = GameController.device_audio_pulse_for_analyzer(analyzer, 0.0, 0.01, 1.0 / 60.0)
+	assert_equal(float(state.get("energy", 0.0)), 0.08, "Analyzer energy should be surfaced to the pulse state")
+	assert_true(float(state.get("pulse", 0.0)) > 0.0, "Available analyzer pulse should affect the tunnel")
+
+func test_device_audio_debug_text_reports_levels() -> void:
+	var text: String = GameController.device_audio_debug_text(true, 0.12345, 0.678)
+	assert_equal(text, "SYS AUDIO ON  E 0.1235  P 0.68", "Debug readout should expose analyzer state and levels")
