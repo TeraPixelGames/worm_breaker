@@ -31,6 +31,7 @@ public final class AndroidSystemAudioCapturePlugin extends GodotPlugin {
 	private static final double PULSE_THRESHOLD = 0.003;
 	private static final double ONSET_THRESHOLD = 0.002;
 	private static final double LEVEL_GAIN = 14.0;
+	private static final double LEVEL_MAX = 0.18;
 	private static final double ONSET_GAIN = 32.0;
 	private static final double ATTACK = 32.0;
 	private static final double DECAY = 6.8;
@@ -40,6 +41,7 @@ public final class AndroidSystemAudioCapturePlugin extends GodotPlugin {
 	private volatile boolean permissionPending = false;
 	private volatile double energy = 0.0;
 	private volatile double pulse = 0.0;
+	private double waveformEnergyFloor = 0.0;
 	private Visualizer visualizer;
 	private MediaProjection mediaProjection;
 	private AudioRecord audioRecord;
@@ -258,7 +260,8 @@ public final class AndroidSystemAudioCapturePlugin extends GodotPlugin {
 			sum += normalized * normalized;
 		}
 		double latestEnergy = Math.sqrt(sum / (double) waveform.length);
-		double target = pulseTarget(latestEnergy, previousEnergy);
+		waveformEnergyFloor = smoothEnergyFloor(waveformEnergyFloor, latestEnergy);
+		double target = pulseTarget(latestEnergy, previousEnergy, waveformEnergyFloor);
 		pulse = smoothPulse(pulse, target, 1.0 / 30.0);
 		energy = latestEnergy;
 		available = true;
@@ -283,7 +286,7 @@ public final class AndroidSystemAudioCapturePlugin extends GodotPlugin {
 			long now = System.nanoTime();
 			double delta = (now - previousNanos) / 1_000_000_000.0;
 			previousNanos = now;
-			double target = pulseTarget(latestEnergy, previousEnergy);
+			double target = pulseTarget(latestEnergy, previousEnergy, 0.0);
 			currentPulse = smoothPulse(currentPulse, target, delta);
 			previousEnergy = latestEnergy;
 			energy = latestEnergy;
@@ -292,10 +295,17 @@ public final class AndroidSystemAudioCapturePlugin extends GodotPlugin {
 		available = false;
 	}
 
-	private static double pulseTarget(double currentEnergy, double previousEnergy) {
-		double levelPulse = Math.max(currentEnergy - PULSE_THRESHOLD, 0.0) * LEVEL_GAIN;
+	private static double pulseTarget(double currentEnergy, double previousEnergy, double energyFloor) {
+		double levelReference = Math.max(PULSE_THRESHOLD, energyFloor + PULSE_THRESHOLD);
+		double levelPulse = Math.min(Math.max(currentEnergy - levelReference, 0.0) * LEVEL_GAIN, LEVEL_MAX);
 		double onsetPulse = Math.max((currentEnergy - previousEnergy) - ONSET_THRESHOLD, 0.0) * ONSET_GAIN;
 		return Math.max(0.0, Math.min(1.0, Math.max(levelPulse, onsetPulse)));
+	}
+
+	private static double smoothEnergyFloor(double currentFloor, double latestEnergy) {
+		double clampedEnergy = Math.max(0.0, latestEnergy);
+		double rate = clampedEnergy > currentFloor ? 0.04 : 0.35;
+		return Math.max(0.0, Math.min(1.0, currentFloor + (clampedEnergy - currentFloor) * rate));
 	}
 
 	private static double smoothPulse(double currentPulse, double targetPulse, double delta) {
@@ -310,5 +320,6 @@ public final class AndroidSystemAudioCapturePlugin extends GodotPlugin {
 		permissionPending = false;
 		energy = 0.0;
 		pulse = 0.0;
+		waveformEnergyFloor = 0.0;
 	}
 }

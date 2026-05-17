@@ -80,6 +80,7 @@ const DEVICE_AUDIO_DISABLE_ENV := "WORM_BREAKER_DISABLE_SYSTEM_AUDIO_PULSE"
 const DEVICE_AUDIO_PULSE_THRESHOLD: float = 0.003
 const DEVICE_AUDIO_PULSE_ONSET_THRESHOLD: float = 0.002
 const DEVICE_AUDIO_PULSE_LEVEL_GAIN: float = 14.0
+const DEVICE_AUDIO_PULSE_LEVEL_MAX: float = 0.18
 const DEVICE_AUDIO_PULSE_ONSET_GAIN: float = 32.0
 const DEVICE_AUDIO_PULSE_ATTACK: float = 32.0
 const DEVICE_AUDIO_PULSE_DECAY: float = 6.8
@@ -1447,7 +1448,7 @@ static func tunnel_texture_speed_for_audio_bpm(base_speed: float, bpm: float, co
 static func device_audio_pulse_target(energy: float, previous_energy: float) -> float:
 	var safe_energy := maxf(energy, 0.0)
 	var safe_previous := maxf(previous_energy, 0.0)
-	var level_pulse := maxf(safe_energy - DEVICE_AUDIO_PULSE_THRESHOLD, 0.0) * DEVICE_AUDIO_PULSE_LEVEL_GAIN
+	var level_pulse := minf(maxf(safe_energy - DEVICE_AUDIO_PULSE_THRESHOLD, 0.0) * DEVICE_AUDIO_PULSE_LEVEL_GAIN, DEVICE_AUDIO_PULSE_LEVEL_MAX)
 	var onset_pulse := maxf((safe_energy - safe_previous) - DEVICE_AUDIO_PULSE_ONSET_THRESHOLD, 0.0) * DEVICE_AUDIO_PULSE_ONSET_GAIN
 	return clampf(maxf(level_pulse, onset_pulse), 0.0, DEVICE_AUDIO_PULSE_MAX)
 

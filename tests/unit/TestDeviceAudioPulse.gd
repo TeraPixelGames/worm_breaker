@@ -27,6 +27,11 @@ func test_device_audio_energy_rise_triggers_bounded_pulse() -> void:
 	assert_true(target > 0.0, "Sudden system audio energy should trigger tunnel pulse")
 	assert_true(target <= 1.0, "System audio pulse target should stay bounded")
 
+func test_steady_device_audio_does_not_pin_pulse() -> void:
+	var target: float = GameController.device_audio_pulse_target(0.15, 0.15)
+	assert_true(target > 0.0, "Steady system audio should keep a small presence glow")
+	assert_true(target < 0.25, "Steady system audio should not hold the tunnel at full pulse")
+
 func test_device_audio_pulse_decays_smoothly() -> void:
 	var next_pulse: float = GameController.smoothed_device_audio_pulse(1.0, 0.0, 1.0 / 60.0)
 	assert_true(next_pulse < 1.0, "System audio pulse should decay toward silence")
