@@ -2,7 +2,7 @@
 
 Native analyzer class for Worm Breaker's tunnel pulse.
 
-The Windows build uses WASAPI loopback for system-output energy. Android and iOS builds register the same `WindowsSystemAudioAnalyzer` class but report unavailable because those platforms do not allow silent arbitrary device-output capture for normal third-party games.
+The Windows build uses WASAPI loopback for system-output energy. Android builds register the same `WindowsSystemAudioAnalyzer` class but report unavailable because Android does not allow silent arbitrary device-output capture for normal third-party games. iOS exports use the game's built-in microphone/game-audio fallback and do not package this extension.
 
 ## Requirements
 
@@ -67,6 +67,6 @@ addons/system_audio_pulse/bin/libsystem_audio_pulse.android.template_release.arm
 
 They are native-load compatibility shims for Android exports; they do not capture device output.
 
-## iOS Build
+## iOS Export
 
-The CMake project has iOS output names and `.gdextension` entries, but iOS builds must be produced on macOS with Xcode and iOS export templates installed. The iOS target is also a native-load compatibility shim; iOS does not provide a normal app API for silent system-output capture.
+Worm Breaker does not package this extension for iOS. The game uses its built-in microphone/game-audio fallback on iOS because iOS does not provide a normal app API for silent system-output capture.
