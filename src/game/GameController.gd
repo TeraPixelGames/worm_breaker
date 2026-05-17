@@ -1588,14 +1588,17 @@ func _setup_android_system_audio_capture() -> void:
 	_device_audio_source_label = DEVICE_AUDIO_SOURCE_SYSTEM
 	_android_system_audio_wait_time = 0.0
 	if not Engine.has_singleton(ANDROID_SYSTEM_AUDIO_SINGLETON):
+		print("Android system audio singleton unavailable; using microphone fallback")
 		_setup_mic_audio_fallback()
 		return
 	var analyzer := Engine.get_singleton(ANDROID_SYSTEM_AUDIO_SINGLETON)
 	if analyzer == null:
+		print("Android system audio singleton returned null; using microphone fallback")
 		_setup_mic_audio_fallback()
 		return
 	_device_audio_analyzer = analyzer
 	if _device_audio_analyzer.has_method("request_capture"):
+		print("Requesting Android system audio capture")
 		_device_audio_analyzer.call("request_capture")
 
 func _setup_mic_audio_fallback() -> void:

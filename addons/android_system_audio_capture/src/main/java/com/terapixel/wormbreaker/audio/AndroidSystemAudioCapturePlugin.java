@@ -61,6 +61,7 @@ public final class AndroidSystemAudioCapturePlugin extends GodotPlugin {
 
 	@UsedByGodot
 	public boolean request_capture() {
+		Log.i(TAG, "request_capture called; available=" + available + " running=" + running.get());
 		if (available || permissionPending || running.get()) {
 			return true;
 		}
@@ -169,6 +170,13 @@ public final class AndroidSystemAudioCapturePlugin extends GodotPlugin {
 	}
 
 	@Override
+	public void onMainResume() {
+		if (!running.get()) {
+			request_capture();
+		}
+	}
+
+	@Override
 	public void onMainDestroy() {
 		stop();
 	}
@@ -204,6 +212,7 @@ public final class AndroidSystemAudioCapturePlugin extends GodotPlugin {
 
 	private boolean startOutputMixVisualizer() {
 		try {
+			Log.i(TAG, "Starting Android output-mix Visualizer capture");
 			Visualizer outputMixVisualizer = new Visualizer(0);
 			int[] captureSizeRange = Visualizer.getCaptureSizeRange();
 			int captureSize = captureSizeRange != null && captureSizeRange.length >= 2 ? captureSizeRange[1] : 1024;
