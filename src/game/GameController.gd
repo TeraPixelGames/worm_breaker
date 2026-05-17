@@ -62,6 +62,12 @@ const DEVICE_AUDIO_PULSE_ONSET_GAIN: float = 32.0
 const DEVICE_AUDIO_PULSE_ATTACK: float = 32.0
 const DEVICE_AUDIO_PULSE_DECAY: float = 6.8
 const DEVICE_AUDIO_PULSE_MAX: float = 1.0
+const DEVICE_AUDIO_SOURCE_SYSTEM := "SYS AUDIO"
+const DEVICE_AUDIO_SOURCE_GAME := "GAME AUDIO"
+const GAME_AUDIO_SPECTRUM_BUS := "Master"
+const GAME_AUDIO_SPECTRUM_MIN_HZ: float = 40.0
+const GAME_AUDIO_SPECTRUM_MAX_HZ: float = 190.0
+const GAME_AUDIO_ENERGY_GAIN: float = 1.65
 const STYLE_STABILITY := "stability"
 const STYLE_OVERDRIVE := "overdrive"
 const POWERUP_WIDE := "WIDE"
@@ -126,6 +132,9 @@ var _device_audio_available: bool = false
 var _device_audio_energy: float = 0.0
 var _device_audio_pulse: float = 0.0
 var _device_audio_debug_label: Label
+var _device_audio_source_label: String = DEVICE_AUDIO_SOURCE_SYSTEM
+var _game_audio_spectrum_effect_index: int = -1
+var _game_audio_spectrum_instance: AudioEffectSpectrumAnalyzerInstance
 var _ball_material: StandardMaterial3D
 var _paddle_materials: Array[StandardMaterial3D] = []
 var _ball_trail_root: Node3D
@@ -194,6 +203,7 @@ func _ready() -> void:
 func _exit_tree() -> void:
 	if _device_audio_analyzer != null and _device_audio_analyzer.has_method("stop"):
 		_device_audio_analyzer.call("stop")
+	_teardown_game_audio_spectrum_fallback()
 
 func _notification(what: int) -> void:
 	if what == NOTIFICATION_WM_SIZE_CHANGED:
@@ -1339,12 +1349,16 @@ static func device_audio_pulse_for_analyzer(analyzer: Object, current_pulse: flo
 		"pulse": smoothed_device_audio_pulse(current_pulse, target_pulse, delta)
 	}
 
-static func device_audio_debug_text(available: bool, energy: float, pulse: float) -> String:
-	return "SYS AUDIO %s  E %.4f  P %.2f" % [
+static func device_audio_debug_text(available: bool, energy: float, pulse: float, source_label: String = DEVICE_AUDIO_SOURCE_SYSTEM) -> String:
+	return "%s %s  E %.4f  P %.2f" % [
+		source_label,
 		"ON" if available else "OFF",
 		maxf(energy, 0.0),
 		clampf(pulse, 0.0, DEVICE_AUDIO_PULSE_MAX)
 	]
+
+static func game_audio_energy_from_magnitude(magnitude: Vector2) -> float:
+	return clampf(magnitude.length() * GAME_AUDIO_ENERGY_GAIN, 0.0, 1.0)
 
 static func signal_gate_hit_strength(hit_timer: float) -> float:
 	return clampf(hit_timer / SIGNAL_GATE_HIT_DURATION, 0.0, 1.0)
@@ -1387,6 +1401,7 @@ func _step_tunnel_texture_motion(delta: float) -> void:
 
 func _setup_device_audio_analyzer() -> void:
 	if OS.get_name() != "Windows":
+		_setup_game_audio_spectrum_fallback()
 		return
 	if OS.get_environment(DEVICE_AUDIO_DISABLE_ENV) == "1":
 		return
@@ -1398,9 +1413,48 @@ func _setup_device_audio_analyzer() -> void:
 	_device_audio_analyzer = analyzer
 	if _device_audio_analyzer.has_method("start"):
 		_device_audio_analyzer.call("start")
+	_device_audio_source_label = DEVICE_AUDIO_SOURCE_SYSTEM
+
+func _setup_game_audio_spectrum_fallback() -> void:
+	_device_audio_source_label = DEVICE_AUDIO_SOURCE_GAME
+	var bus_index := AudioServer.get_bus_index(GAME_AUDIO_SPECTRUM_BUS)
+	if bus_index < 0:
+		return
+	var effect := AudioEffectSpectrumAnalyzer.new()
+	effect.resource_name = "WormBreakerGameAudioPulse"
+	effect.buffer_length = 0.25
+	_game_audio_spectrum_effect_index = AudioServer.get_bus_effect_count(bus_index)
+	AudioServer.add_bus_effect(bus_index, effect, _game_audio_spectrum_effect_index)
+	_game_audio_spectrum_instance = AudioServer.get_bus_effect_instance(bus_index, _game_audio_spectrum_effect_index) as AudioEffectSpectrumAnalyzerInstance
+
+func _teardown_game_audio_spectrum_fallback() -> void:
+	if _game_audio_spectrum_effect_index < 0:
+		return
+	var bus_index := AudioServer.get_bus_index(GAME_AUDIO_SPECTRUM_BUS)
+	if bus_index >= 0 and _game_audio_spectrum_effect_index < AudioServer.get_bus_effect_count(bus_index):
+		AudioServer.remove_bus_effect(bus_index, _game_audio_spectrum_effect_index)
+	_game_audio_spectrum_effect_index = -1
+	_game_audio_spectrum_instance = null
 
 func _step_device_audio_pulse(delta: float) -> void:
-	var next_state := device_audio_pulse_for_analyzer(_device_audio_analyzer, _device_audio_pulse, _device_audio_energy, delta)
+	var next_state := {}
+	if _device_audio_analyzer != null:
+		next_state = device_audio_pulse_for_analyzer(_device_audio_analyzer, _device_audio_pulse, _device_audio_energy, delta)
+	elif _game_audio_spectrum_instance != null:
+		var magnitude := _game_audio_spectrum_instance.get_magnitude_for_frequency_range(
+			GAME_AUDIO_SPECTRUM_MIN_HZ,
+			GAME_AUDIO_SPECTRUM_MAX_HZ,
+			AudioEffectSpectrumAnalyzerInstance.MAGNITUDE_AVERAGE
+		)
+		var energy := game_audio_energy_from_magnitude(magnitude)
+		var target_pulse := device_audio_pulse_target(energy, _device_audio_energy)
+		next_state = {
+			"available": true,
+			"energy": energy,
+			"pulse": smoothed_device_audio_pulse(_device_audio_pulse, target_pulse, delta)
+		}
+	else:
+		next_state = device_audio_pulse_for_analyzer(null, _device_audio_pulse, _device_audio_energy, delta)
 	_device_audio_available = bool(next_state.get("available", false))
 	_device_audio_energy = float(next_state.get("energy", 0.0))
 	_device_audio_pulse = float(next_state.get("pulse", 0.0))
@@ -1411,7 +1465,7 @@ func _build_device_audio_debug_label() -> void:
 	_device_audio_debug_label = Label.new()
 	_device_audio_debug_label.name = "DeviceAudioDebugLabel"
 	_device_audio_debug_label.mouse_filter = Control.MOUSE_FILTER_IGNORE
-	_device_audio_debug_label.text = device_audio_debug_text(false, 0.0, 0.0)
+	_device_audio_debug_label.text = device_audio_debug_text(false, 0.0, 0.0, _device_audio_source_label)
 	_device_audio_debug_label.horizontal_alignment = HORIZONTAL_ALIGNMENT_LEFT
 	_device_audio_debug_label.vertical_alignment = VERTICAL_ALIGNMENT_BOTTOM
 	_device_audio_debug_label.add_theme_font_size_override("font_size", 20)
@@ -1637,7 +1691,7 @@ func _update_hud() -> void:
 	phase_label.text = "%s  %d/%d" % [phase, destroyed, _initial_brick_count]
 	combo_label.text = hud_pulse_text(_chain_combo)
 	if _device_audio_debug_label != null:
-		_device_audio_debug_label.text = device_audio_debug_text(_device_audio_available, _device_audio_energy, _device_audio_pulse)
+		_device_audio_debug_label.text = device_audio_debug_text(_device_audio_available, _device_audio_energy, _device_audio_pulse, _device_audio_source_label)
 
 func _powerup_status_text() -> String:
 	var parts: Array[String] = []
