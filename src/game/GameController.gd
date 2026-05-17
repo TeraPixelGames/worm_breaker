@@ -53,6 +53,19 @@ const PORTAL_SPEED_ACCELERATION: float = 0.85
 const TUNNEL_TEXTURE_BASE_SPEED: float = 0.62
 const TUNNEL_TEXTURE_MAX_SPEED: float = 2.6
 const TUNNEL_TEXTURE_SPEED_ACCELERATION: float = 1.1
+const AUDIO_BPM_DEFAULT: float = 120.0
+const AUDIO_BPM_MIN: float = 70.0
+const AUDIO_BPM_MAX: float = 180.0
+const AUDIO_BPM_ONSET_PULSE_MIN: float = 0.16
+const AUDIO_BPM_ONSET_PULSE_RISE: float = 0.07
+const AUDIO_BPM_MIN_INTERVAL: float = 60.0 / AUDIO_BPM_MAX
+const AUDIO_BPM_MAX_INTERVAL: float = 60.0 / AUDIO_BPM_MIN
+const AUDIO_BPM_BLEND: float = 0.28
+const AUDIO_BPM_CONFIDENCE_ATTACK: float = 0.34
+const AUDIO_BPM_CONFIDENCE_DECAY: float = 0.35
+const AUDIO_BPM_TIMEOUT: float = 2.4
+const AUDIO_BPM_TUNNEL_BLEND: float = 0.48
+const AUDIO_BPM_PULSE_SPEED_BOOST: float = 0.22
 const DEVICE_AUDIO_ANALYZER_CLASS := "WindowsSystemAudioAnalyzer"
 const ANDROID_SYSTEM_AUDIO_SINGLETON := "AndroidSystemAudioCapture"
 const DEVICE_AUDIO_DISABLE_ENV := "WORM_BREAKER_DISABLE_SYSTEM_AUDIO_PULSE"
@@ -140,6 +153,10 @@ var _device_audio_energy: float = 0.0
 var _device_audio_pulse: float = 0.0
 var _device_audio_debug_label: Label
 var _device_audio_source_label: String = DEVICE_AUDIO_SOURCE_SYSTEM
+var _audio_bpm: float = AUDIO_BPM_DEFAULT
+var _audio_bpm_confidence: float = 0.0
+var _audio_beat_time: float = 0.0
+var _audio_last_beat_time: float = -1.0
 var _android_system_audio_wait_time: float = 0.0
 var _mic_audio_player: AudioStreamPlayer
 var _mic_audio_capture_effect_index: int = -1
@@ -227,8 +244,8 @@ func _physics_process(delta: float) -> void:
 	_haptic_cooldown = maxf(_haptic_cooldown - delta, 0.0)
 	_signal_gate_hit_timer = maxf(_signal_gate_hit_timer - delta, 0.0)
 	_step_portal_motion(delta)
-	_step_tunnel_texture_motion(delta)
 	_step_device_audio_pulse(delta)
+	_step_tunnel_texture_motion(delta)
 	_update_psychedelic_materials()
 	_update_fractal_overlay()
 	_update_impact_particles(delta)
@@ -1332,6 +1349,40 @@ static func smoothed_tunnel_texture_speed(current_speed: float, target_speed: fl
 	var weight: float = 1.0 - exp(-TUNNEL_TEXTURE_SPEED_ACCELERATION * maxf(delta, 0.0))
 	return lerpf(current_speed, target_speed, clampf(weight, 0.0, 1.0))
 
+static func audio_beat_onset(current_pulse: float, previous_pulse: float) -> bool:
+	var safe_current := clampf(current_pulse, 0.0, DEVICE_AUDIO_PULSE_MAX)
+	var safe_previous := clampf(previous_pulse, 0.0, DEVICE_AUDIO_PULSE_MAX)
+	return safe_current >= AUDIO_BPM_ONSET_PULSE_MIN and (safe_current - safe_previous) >= AUDIO_BPM_ONSET_PULSE_RISE
+
+static func audio_bpm_from_beat_interval(interval_seconds: float) -> float:
+	if interval_seconds < AUDIO_BPM_MIN_INTERVAL or interval_seconds > AUDIO_BPM_MAX_INTERVAL:
+		return 0.0
+	return clampf(60.0 / interval_seconds, AUDIO_BPM_MIN, AUDIO_BPM_MAX)
+
+static func smoothed_audio_bpm(current_bpm: float, interval_bpm: float) -> float:
+	if interval_bpm <= 0.0:
+		return clampf(current_bpm, AUDIO_BPM_MIN, AUDIO_BPM_MAX)
+	return lerpf(clampf(current_bpm, AUDIO_BPM_MIN, AUDIO_BPM_MAX), clampf(interval_bpm, AUDIO_BPM_MIN, AUDIO_BPM_MAX), AUDIO_BPM_BLEND)
+
+static func audio_bpm_confidence_after_step(current_confidence: float, valid_onset: bool, timed_out: bool, delta: float) -> float:
+	var confidence := clampf(current_confidence, 0.0, 1.0)
+	if valid_onset:
+		return clampf(confidence + AUDIO_BPM_CONFIDENCE_ATTACK, 0.0, 1.0)
+	if timed_out:
+		return clampf(confidence - AUDIO_BPM_CONFIDENCE_DECAY * maxf(delta, 0.0), 0.0, 1.0)
+	return confidence
+
+static func tunnel_texture_speed_for_audio_bpm(base_speed: float, bpm: float, confidence: float, pulse: float) -> float:
+	var safe_base := clampf(base_speed, TUNNEL_TEXTURE_BASE_SPEED, TUNNEL_TEXTURE_MAX_SPEED)
+	var safe_confidence := clampf(confidence, 0.0, 1.0)
+	if safe_confidence <= 0.0:
+		return safe_base
+	var bpm_ratio := clampf((clampf(bpm, AUDIO_BPM_MIN, AUDIO_BPM_MAX) - AUDIO_BPM_MIN) / (AUDIO_BPM_MAX - AUDIO_BPM_MIN), 0.0, 1.0)
+	var bpm_speed := lerpf(TUNNEL_TEXTURE_BASE_SPEED, TUNNEL_TEXTURE_MAX_SPEED, bpm_ratio)
+	var blended_speed := lerpf(safe_base, maxf(safe_base, bpm_speed), safe_confidence * AUDIO_BPM_TUNNEL_BLEND)
+	var pulse_boost := clampf(pulse, 0.0, DEVICE_AUDIO_PULSE_MAX) * safe_confidence * AUDIO_BPM_PULSE_SPEED_BOOST
+	return clampf(blended_speed + pulse_boost, TUNNEL_TEXTURE_BASE_SPEED, TUNNEL_TEXTURE_MAX_SPEED)
+
 static func device_audio_pulse_target(energy: float, previous_energy: float) -> float:
 	var safe_energy := maxf(energy, 0.0)
 	var safe_previous := maxf(previous_energy, 0.0)
@@ -1362,13 +1413,21 @@ static func device_audio_pulse_for_analyzer(analyzer: Object, current_pulse: flo
 		"pulse": smoothed_device_audio_pulse(current_pulse, target_pulse, delta)
 	}
 
-static func device_audio_debug_text(available: bool, energy: float, pulse: float, source_label: String = DEVICE_AUDIO_SOURCE_SYSTEM) -> String:
-	return "%s %s  E %.4f  P %.2f" % [
+static func device_audio_debug_text(available: bool, energy: float, pulse: float, source_label: String = DEVICE_AUDIO_SOURCE_SYSTEM, bpm: float = -1.0, bpm_confidence: float = 0.0) -> String:
+	var text := "%s %s  E %.4f  P %.2f" % [
 		source_label,
 		"ON" if available else "OFF",
 		maxf(energy, 0.0),
 		clampf(pulse, 0.0, DEVICE_AUDIO_PULSE_MAX)
 	]
+	if bpm >= 0.0:
+		var confidence := clampf(bpm_confidence, 0.0, 1.0)
+		var bpm_text := "--"
+		if confidence > 0.05:
+			bpm_text = "%03d" % int(round(clampf(bpm, AUDIO_BPM_MIN, AUDIO_BPM_MAX)))
+		text += "  BPM %s  C %.2f" % [bpm_text, confidence]
+	return text
+
 
 static func game_audio_energy_from_magnitude(magnitude: Vector2) -> float:
 	return clampf(magnitude.length() * GAME_AUDIO_ENERGY_GAIN, 0.0, 1.0)
@@ -1417,12 +1476,28 @@ func _step_portal_motion(delta: float) -> void:
 func _step_tunnel_texture_motion(delta: float) -> void:
 	if _tunnel_material == null:
 		return
-	var target_speed := tunnel_texture_speed_for_ball_velocity(_ball_v_z, _ball_v_theta)
+	var base_speed := tunnel_texture_speed_for_ball_velocity(_ball_v_z, _ball_v_theta)
+	var target_speed := tunnel_texture_speed_for_audio_bpm(base_speed, _audio_bpm, _audio_bpm_confidence, _device_audio_pulse)
 	if _pending_transition and _transition_mode == "portal_breach":
 		target_speed = TUNNEL_TEXTURE_MAX_SPEED
 	_tunnel_texture_speed = smoothed_tunnel_texture_speed(_tunnel_texture_speed, target_speed, delta)
 	_tunnel_texture_phase = fmod(_tunnel_texture_phase + delta * _tunnel_texture_speed, 10000.0)
 	_tunnel_material.set_shader_parameter("tunnel_phase", _tunnel_texture_phase)
+
+func _step_audio_bpm(delta: float, previous_pulse: float) -> void:
+	_audio_beat_time += maxf(delta, 0.0)
+	var has_onset := _device_audio_available and audio_beat_onset(_device_audio_pulse, previous_pulse)
+	var valid_interval := false
+	if has_onset:
+		if _audio_last_beat_time >= 0.0:
+			var interval := _audio_beat_time - _audio_last_beat_time
+			var interval_bpm := audio_bpm_from_beat_interval(interval)
+			if interval_bpm > 0.0:
+				_audio_bpm = smoothed_audio_bpm(_audio_bpm, interval_bpm)
+				valid_interval = true
+		_audio_last_beat_time = _audio_beat_time
+	var timed_out := _audio_last_beat_time < 0.0 or (_audio_beat_time - _audio_last_beat_time) > AUDIO_BPM_TIMEOUT
+	_audio_bpm_confidence = audio_bpm_confidence_after_step(_audio_bpm_confidence, valid_interval, timed_out, delta)
 
 func _setup_device_audio_analyzer() -> void:
 	if OS.get_environment(DEVICE_AUDIO_DISABLE_ENV) == "1":
@@ -1527,6 +1602,7 @@ func _teardown_game_audio_spectrum_fallback() -> void:
 	_game_audio_spectrum_instance = null
 
 func _step_device_audio_pulse(delta: float) -> void:
+	var previous_pulse := _device_audio_pulse
 	var next_state := {}
 	if _device_audio_analyzer != null:
 		next_state = device_audio_pulse_for_analyzer(_device_audio_analyzer, _device_audio_pulse, _device_audio_energy, delta)
@@ -1562,6 +1638,7 @@ func _step_device_audio_pulse(delta: float) -> void:
 	_device_audio_available = bool(next_state.get("available", false))
 	_device_audio_energy = float(next_state.get("energy", 0.0))
 	_device_audio_pulse = float(next_state.get("pulse", 0.0))
+	_step_audio_bpm(delta, previous_pulse)
 	if _tunnel_material != null:
 		_tunnel_material.set_shader_parameter("device_audio_pulse", _device_audio_pulse)
 
@@ -1814,7 +1891,7 @@ func _update_hud() -> void:
 	phase_label.text = "%s  %d/%d" % [phase, destroyed, _initial_brick_count]
 	combo_label.text = hud_pulse_text(_chain_combo)
 	if _device_audio_debug_label != null:
-		_device_audio_debug_label.text = device_audio_debug_text(_device_audio_available, _device_audio_energy, _device_audio_pulse, _device_audio_source_label)
+		_device_audio_debug_label.text = device_audio_debug_text(_device_audio_available, _device_audio_energy, _device_audio_pulse, _device_audio_source_label, _audio_bpm, _audio_bpm_confidence)
 
 func _powerup_status_text() -> String:
 	var parts: Array[String] = []
