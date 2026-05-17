@@ -23,17 +23,24 @@ func test_audio_bpm_interval_maps_to_tempo() -> void:
 
 func test_audio_bpm_rejects_out_of_range_intervals() -> void:
 	assert_equal(GameController.audio_bpm_from_beat_interval(0.2), 0.0, "Intervals above the BPM cap should be rejected")
-	assert_equal(GameController.audio_bpm_from_beat_interval(1.2), 0.0, "Intervals below the BPM floor should be rejected")
+	assert_equal(GameController.audio_bpm_from_beat_interval(2.0), 0.0, "Intervals below the BPM floor should be rejected")
+
+func test_audio_bpm_accepts_skipped_beat_interval() -> void:
+	var bpm: float = GameController.audio_bpm_from_beat_interval(1.0)
+	assert_true(absf(bpm - 120.0) < 0.01, "Every-other-beat detections should still map to the song BPM")
 
 func test_audio_bpm_onset_requires_sharp_pulse_rise() -> void:
 	assert_true(GameController.audio_beat_onset(0.3, 0.1), "Sharp pulse rises should count as beat onsets")
 	assert_true(not GameController.audio_beat_onset(0.3, 0.28), "Sustained pulse levels should not retrigger BPM")
 	assert_true(not GameController.audio_beat_onset(0.07, 0.0), "Small pulse rises should stay below the BPM gate")
+	assert_true(GameController.audio_beat_onset(0.05, 0.04, 0.04, 0.02), "Raw energy rises should count as beat onsets when smoothed pulse is muted")
 
 func test_audio_bpm_confidence_attacks_and_decays() -> void:
 	var attacked: float = GameController.audio_bpm_confidence_after_step(0.0, true, false, 1.0 / 60.0)
+	var probing: float = GameController.audio_bpm_confidence_after_step(0.0, false, false, 1.0 / 60.0, true)
 	var decayed: float = GameController.audio_bpm_confidence_after_step(0.8, false, true, 1.0)
 	assert_true(attacked >= 0.5, "Valid beat intervals should make BPM confidence visible quickly")
+	assert_true(probing > 0.05, "Detected onsets should make BPM visible while interval lock is warming up")
 	assert_true(decayed < 0.8, "Timed-out beat tracking should decay BPM confidence")
 
 func test_audio_beat_speed_kick_attacks_and_decays() -> void:
