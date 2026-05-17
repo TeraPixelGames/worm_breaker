@@ -29,6 +29,20 @@ func test_audio_bpm_accepts_skipped_beat_interval() -> void:
 	var bpm: float = GameController.audio_bpm_from_beat_interval(1.0)
 	assert_true(absf(bpm - 120.0) < 0.01, "Every-other-beat detections should still map to the song BPM")
 
+func test_audio_bpm_recent_samples_weight_new_tempo() -> void:
+	var samples: Array[float] = [100.0, 100.0, 100.0]
+	samples = GameController.audio_bpm_samples_after_interval(samples, 112.0, 100.0)
+	var bpm: float = GameController.audio_bpm_from_recent_samples(samples)
+	assert_true(bpm > 100.0, "Recent sample weighting should move toward a changed tempo")
+	assert_true(bpm < 112.0, "Small tempo drift should still be smoothed")
+
+func test_audio_bpm_large_shift_relocks_quickly() -> void:
+	var samples: Array[float] = [100.0, 100.0, 100.0]
+	samples = GameController.audio_bpm_samples_after_interval(samples, 160.0, 100.0)
+	assert_equal(samples.size(), 1, "Large tempo changes should drop stale BPM history")
+	var bpm: float = GameController.smoothed_audio_bpm(100.0, GameController.audio_bpm_from_recent_samples(samples))
+	assert_true(bpm > 140.0, "Large tempo changes should move the displayed BPM quickly")
+
 func test_audio_bpm_onset_requires_sharp_pulse_rise() -> void:
 	assert_true(GameController.audio_beat_onset(0.3, 0.1), "Sharp pulse rises should count as beat onsets")
 	assert_true(not GameController.audio_beat_onset(0.3, 0.28), "Sustained pulse levels should not retrigger BPM")

@@ -63,6 +63,9 @@ const AUDIO_BPM_ONSET_ENERGY_RISE: float = 0.006
 const AUDIO_BPM_MIN_INTERVAL: float = 60.0 / AUDIO_BPM_MAX
 const AUDIO_BPM_MAX_INTERVAL: float = 60.0 / AUDIO_BPM_MIN
 const AUDIO_BPM_BLEND: float = 0.28
+const AUDIO_BPM_SHIFT_BLEND: float = 0.68
+const AUDIO_BPM_SHIFT_THRESHOLD: float = 16.0
+const AUDIO_BPM_HISTORY_SIZE: int = 4
 const AUDIO_BPM_CONFIDENCE_ATTACK: float = 0.5
 const AUDIO_BPM_CONFIDENCE_PROBE: float = 0.14
 const AUDIO_BPM_CONFIDENCE_DECAY: float = 0.35
@@ -163,6 +166,7 @@ var _audio_bpm_confidence: float = 0.0
 var _audio_beat_time: float = 0.0
 var _audio_last_beat_time: float = -1.0
 var _audio_beat_speed_kick: float = 0.0
+var _audio_bpm_samples: Array[float] = []
 var _android_system_audio_wait_time: float = 0.0
 var _mic_audio_player: AudioStreamPlayer
 var _mic_audio_capture_effect_index: int = -1
@@ -1378,7 +1382,36 @@ static func audio_bpm_from_beat_interval(interval_seconds: float) -> float:
 static func smoothed_audio_bpm(current_bpm: float, interval_bpm: float) -> float:
 	if interval_bpm <= 0.0:
 		return clampf(current_bpm, AUDIO_BPM_MIN, AUDIO_BPM_MAX)
-	return lerpf(clampf(current_bpm, AUDIO_BPM_MIN, AUDIO_BPM_MAX), clampf(interval_bpm, AUDIO_BPM_MIN, AUDIO_BPM_MAX), AUDIO_BPM_BLEND)
+	var safe_current := clampf(current_bpm, AUDIO_BPM_MIN, AUDIO_BPM_MAX)
+	var safe_interval := clampf(interval_bpm, AUDIO_BPM_MIN, AUDIO_BPM_MAX)
+	var blend := AUDIO_BPM_SHIFT_BLEND if absf(safe_interval - safe_current) >= AUDIO_BPM_SHIFT_THRESHOLD else AUDIO_BPM_BLEND
+	return lerpf(safe_current, safe_interval, blend)
+
+static func audio_bpm_samples_after_interval(samples: Array[float], interval_bpm: float, current_bpm: float) -> Array[float]:
+	var safe_interval := clampf(interval_bpm, AUDIO_BPM_MIN, AUDIO_BPM_MAX)
+	var next_samples: Array[float] = []
+	if absf(safe_interval - clampf(current_bpm, AUDIO_BPM_MIN, AUDIO_BPM_MAX)) < AUDIO_BPM_SHIFT_THRESHOLD:
+		var start_index: int = maxi(samples.size() - AUDIO_BPM_HISTORY_SIZE + 1, 0)
+		for i in range(start_index, samples.size()):
+			next_samples.append(clampf(samples[i], AUDIO_BPM_MIN, AUDIO_BPM_MAX))
+	next_samples.append(safe_interval)
+	return next_samples
+
+static func audio_bpm_from_recent_samples(samples: Array[float]) -> float:
+	if samples.is_empty():
+		return 0.0
+	var total := 0.0
+	var total_weight := 0.0
+	var start_index: int = maxi(samples.size() - AUDIO_BPM_HISTORY_SIZE, 0)
+	var weight := 1.0
+	for i in range(start_index, samples.size()):
+		var bpm := clampf(samples[i], AUDIO_BPM_MIN, AUDIO_BPM_MAX)
+		total += bpm * weight
+		total_weight += weight
+		weight += 1.0
+	if total_weight <= 0.0:
+		return 0.0
+	return clampf(total / total_weight, AUDIO_BPM_MIN, AUDIO_BPM_MAX)
 
 static func audio_bpm_confidence_after_step(current_confidence: float, valid_onset: bool, timed_out: bool, delta: float, detected_onset: bool = false) -> float:
 	var confidence := clampf(current_confidence, 0.0, 1.0)
@@ -1523,7 +1556,9 @@ func _step_audio_bpm(delta: float, previous_pulse: float, previous_energy: float
 			var interval := _audio_beat_time - _audio_last_beat_time
 			var interval_bpm := audio_bpm_from_beat_interval(interval)
 			if interval_bpm > 0.0:
-				_audio_bpm = smoothed_audio_bpm(_audio_bpm, interval_bpm)
+				_audio_bpm_samples = audio_bpm_samples_after_interval(_audio_bpm_samples, interval_bpm, _audio_bpm)
+				var recent_bpm := audio_bpm_from_recent_samples(_audio_bpm_samples)
+				_audio_bpm = smoothed_audio_bpm(_audio_bpm, recent_bpm)
 				valid_interval = true
 		_audio_last_beat_time = _audio_beat_time
 	var timed_out := _audio_last_beat_time < 0.0 or (_audio_beat_time - _audio_last_beat_time) > AUDIO_BPM_TIMEOUT
