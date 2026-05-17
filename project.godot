@@ -27,6 +27,10 @@ AudioManager="*res://addons/arcade_core/AudioManager.gd"
 Fx="*res://addons/arcade_core/Fx.gd"
 AdManager="*res://addons/arcade_core/AdManager.gd"
 
+[audio]
+
+driver/enable_input=true
+
 [display]
 
 window/size/viewport_width=1080
