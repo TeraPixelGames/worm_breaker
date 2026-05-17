@@ -8,3 +8,7 @@ reloadable = false
 
 windows.debug.x86_64 = "res://addons/system_audio_pulse/bin/system_audio_pulse.windows.template_debug.x86_64.dll"
 windows.release.x86_64 = "res://addons/system_audio_pulse/bin/system_audio_pulse.windows.template_release.x86_64.dll"
+android.debug.arm64 = "res://addons/system_audio_pulse/bin/libsystem_audio_pulse.android.template_debug.arm64.so"
+android.release.arm64 = "res://addons/system_audio_pulse/bin/libsystem_audio_pulse.android.template_release.arm64.so"
+ios.debug.arm64 = "res://addons/system_audio_pulse/bin/libsystem_audio_pulse.ios.template_debug.arm64.dylib"
+ios.release.arm64 = "res://addons/system_audio_pulse/bin/libsystem_audio_pulse.ios.template_release.arm64.dylib"

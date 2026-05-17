@@ -1,6 +1,8 @@
 # System Audio Pulse GDExtension
 
-Windows-only WASAPI loopback analyzer for Worm Breaker's tunnel pulse.
+Native analyzer class for Worm Breaker's tunnel pulse.
+
+The Windows build uses WASAPI loopback for system-output energy. Android and iOS builds register the same `WindowsSystemAudioAnalyzer` class but report unavailable because those platforms do not allow silent arbitrary device-output capture for normal third-party games.
 
 ## Requirements
 
@@ -10,7 +12,7 @@ Windows-only WASAPI loopback analyzer for Worm Breaker's tunnel pulse.
 - CMake 3.22 or newer.
 - Git, so CMake can fetch `godot-cpp`.
 
-## Build
+## Windows Build
 
 From this directory:
 
@@ -40,3 +42,31 @@ When the Windows DLL and `.gdextension` file are present, the analyzer starts by
 $env:WORM_BREAKER_DISABLE_SYSTEM_AUDIO_PULSE = "1"
 godot --path C:\code\TeraPixel\games\worm_breaker
 ```
+
+## Android Build
+
+From this directory:
+
+```powershell
+.\build-android.ps1 -Config Debug
+.\build-android.ps1 -Config Release
+```
+
+The script uses Ninja Multi-Config when Visual Studio's bundled Ninja is available and forwards parallelism through CMake. Override the worker count with `-Jobs`:
+
+```powershell
+.\build-android.ps1 -Config Debug -Jobs 24
+```
+
+The Android shared libraries are written to:
+
+```text
+addons/system_audio_pulse/bin/libsystem_audio_pulse.android.template_debug.arm64.so
+addons/system_audio_pulse/bin/libsystem_audio_pulse.android.template_release.arm64.so
+```
+
+They are native-load compatibility shims for Android exports; they do not capture device output.
+
+## iOS Build
+
+The CMake project has iOS output names and `.gdextension` entries, but iOS builds must be produced on macOS with Xcode and iOS export templates installed. The iOS target is also a native-load compatibility shim; iOS does not provide a normal app API for silent system-output capture.

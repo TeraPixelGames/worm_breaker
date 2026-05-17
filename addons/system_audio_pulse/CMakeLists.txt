@@ -31,10 +31,19 @@ target_include_directories(system_audio_pulse PRIVATE src)
 target_link_libraries(system_audio_pulse PRIVATE godot-cpp)
 
 if(WIN32)
+	set(SYSTEM_AUDIO_PLATFORM "windows")
+	set(SYSTEM_AUDIO_ARCH "x86_64")
 	target_compile_definitions(system_audio_pulse PRIVATE NOMINMAX WIN32_LEAN_AND_MEAN)
 	target_link_libraries(system_audio_pulse PRIVATE ole32 uuid avrt)
+elseif(ANDROID)
+	set(SYSTEM_AUDIO_PLATFORM "android")
+	set(SYSTEM_AUDIO_ARCH "arm64")
+	target_link_libraries(system_audio_pulse PRIVATE c++_shared)
+elseif(IOS)
+	set(SYSTEM_AUDIO_PLATFORM "ios")
+	set(SYSTEM_AUDIO_ARCH "arm64")
 else()
-	message(FATAL_ERROR "system_audio_pulse currently supports Windows builds only.")
+	message(FATAL_ERROR "system_audio_pulse currently supports Windows, Android, and iOS builds only.")
 endif()
 
 set_target_properties(system_audio_pulse PROPERTIES
@@ -53,8 +62,45 @@ set_target_properties(system_audio_pulse PROPERTIES
 	ARCHIVE_OUTPUT_DIRECTORY_RELEASE "${CMAKE_CURRENT_SOURCE_DIR}/bin"
 	ARCHIVE_OUTPUT_DIRECTORY_RELWITHDEBINFO "${CMAKE_CURRENT_SOURCE_DIR}/bin"
 	ARCHIVE_OUTPUT_DIRECTORY_MINSIZEREL "${CMAKE_CURRENT_SOURCE_DIR}/bin"
-	OUTPUT_NAME_DEBUG "system_audio_pulse.windows.template_debug.x86_64"
-	OUTPUT_NAME_RELEASE "system_audio_pulse.windows.template_release.x86_64"
-	OUTPUT_NAME_RELWITHDEBINFO "system_audio_pulse.windows.template_release.x86_64"
-	OUTPUT_NAME_MINSIZEREL "system_audio_pulse.windows.template_release.x86_64"
 )
+
+if(WIN32)
+	set_target_properties(system_audio_pulse PROPERTIES
+		OUTPUT_NAME_DEBUG "system_audio_pulse.windows.template_debug.x86_64"
+		OUTPUT_NAME_RELEASE "system_audio_pulse.windows.template_release.x86_64"
+		OUTPUT_NAME_RELWITHDEBINFO "system_audio_pulse.windows.template_release.x86_64"
+		OUTPUT_NAME_MINSIZEREL "system_audio_pulse.windows.template_release.x86_64"
+	)
+elseif(ANDROID)
+	set_target_properties(system_audio_pulse PROPERTIES
+		PREFIX "lib"
+		SUFFIX ".so"
+	)
+	if(CMAKE_CONFIGURATION_TYPES)
+		set_target_properties(system_audio_pulse PROPERTIES
+			OUTPUT_NAME_DEBUG "system_audio_pulse.android.template_debug.arm64"
+			OUTPUT_NAME_RELEASE "system_audio_pulse.android.template_release.arm64"
+			OUTPUT_NAME_RELWITHDEBINFO "system_audio_pulse.android.template_release.arm64"
+			OUTPUT_NAME_MINSIZEREL "system_audio_pulse.android.template_release.arm64"
+		)
+	else()
+		string(TOLOWER "${CMAKE_BUILD_TYPE}" SYSTEM_AUDIO_BUILD_TYPE)
+		if(SYSTEM_AUDIO_BUILD_TYPE STREQUAL "debug")
+			set(SYSTEM_AUDIO_VARIANT "template_debug")
+		else()
+			set(SYSTEM_AUDIO_VARIANT "template_release")
+		endif()
+		set_target_properties(system_audio_pulse PROPERTIES
+			OUTPUT_NAME "system_audio_pulse.${SYSTEM_AUDIO_PLATFORM}.${SYSTEM_AUDIO_VARIANT}.${SYSTEM_AUDIO_ARCH}"
+		)
+	endif()
+elseif(IOS)
+	set_target_properties(system_audio_pulse PROPERTIES
+		PREFIX "lib"
+		SUFFIX ".dylib"
+		OUTPUT_NAME_DEBUG "system_audio_pulse.ios.template_debug.arm64"
+		OUTPUT_NAME_RELEASE "system_audio_pulse.ios.template_release.arm64"
+		OUTPUT_NAME_RELWITHDEBINFO "system_audio_pulse.ios.template_release.arm64"
+		OUTPUT_NAME_MINSIZEREL "system_audio_pulse.ios.template_release.arm64"
+	)
+endif()
