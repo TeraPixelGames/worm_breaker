@@ -57,3 +57,13 @@ func test_game_audio_magnitude_maps_to_bounded_energy() -> void:
 	var energy: float = GameController.game_audio_energy_from_magnitude(Vector2(0.5, 0.5))
 	assert_true(energy > 0.0, "Game audio magnitude should produce fallback energy")
 	assert_true(energy <= 1.0, "Game audio fallback energy should stay bounded")
+
+func test_mic_audio_debug_text_reports_fallback_source() -> void:
+	var text: String = GameController.device_audio_debug_text(true, 0.1, 0.3, GameController.DEVICE_AUDIO_SOURCE_MIC)
+	assert_equal(text, "MIC AUDIO ON  E 0.1000  P 0.30", "Debug readout should identify the microphone fallback")
+
+func test_mic_audio_frames_map_to_bounded_energy() -> void:
+	var frames := PackedVector2Array([Vector2(0.25, -0.25), Vector2(-0.5, 0.5)])
+	var energy: float = GameController.mic_audio_energy_from_frames(frames)
+	assert_true(energy > 0.0, "Mic frames should produce fallback energy")
+	assert_true(energy <= 1.0, "Mic fallback energy should stay bounded")

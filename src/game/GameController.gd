@@ -54,6 +54,7 @@ const TUNNEL_TEXTURE_BASE_SPEED: float = 0.62
 const TUNNEL_TEXTURE_MAX_SPEED: float = 2.6
 const TUNNEL_TEXTURE_SPEED_ACCELERATION: float = 1.1
 const DEVICE_AUDIO_ANALYZER_CLASS := "WindowsSystemAudioAnalyzer"
+const ANDROID_SYSTEM_AUDIO_SINGLETON := "AndroidSystemAudioCapture"
 const DEVICE_AUDIO_DISABLE_ENV := "WORM_BREAKER_DISABLE_SYSTEM_AUDIO_PULSE"
 const DEVICE_AUDIO_PULSE_THRESHOLD: float = 0.003
 const DEVICE_AUDIO_PULSE_ONSET_THRESHOLD: float = 0.002
@@ -63,11 +64,15 @@ const DEVICE_AUDIO_PULSE_ATTACK: float = 32.0
 const DEVICE_AUDIO_PULSE_DECAY: float = 6.8
 const DEVICE_AUDIO_PULSE_MAX: float = 1.0
 const DEVICE_AUDIO_SOURCE_SYSTEM := "SYS AUDIO"
+const DEVICE_AUDIO_SOURCE_MIC := "MIC AUDIO"
 const DEVICE_AUDIO_SOURCE_GAME := "GAME AUDIO"
 const GAME_AUDIO_SPECTRUM_BUS := "Master"
 const GAME_AUDIO_SPECTRUM_MIN_HZ: float = 40.0
 const GAME_AUDIO_SPECTRUM_MAX_HZ: float = 190.0
 const GAME_AUDIO_ENERGY_GAIN: float = 1.65
+const MIC_AUDIO_CAPTURE_BUS := "MicCapture"
+const MIC_AUDIO_ENERGY_GAIN: float = 2.8
+const ANDROID_SYSTEM_AUDIO_FALLBACK_DELAY: float = 2.5
 const STYLE_STABILITY := "stability"
 const STYLE_OVERDRIVE := "overdrive"
 const POWERUP_WIDE := "WIDE"
@@ -127,12 +132,16 @@ var _rival_target: int = 1200
 var _tunnel_material: ShaderMaterial
 var _tunnel_texture_phase: float = 0.0
 var _tunnel_texture_speed: float = TUNNEL_TEXTURE_BASE_SPEED
-var _device_audio_analyzer: RefCounted
+var _device_audio_analyzer: Object
 var _device_audio_available: bool = false
 var _device_audio_energy: float = 0.0
 var _device_audio_pulse: float = 0.0
 var _device_audio_debug_label: Label
 var _device_audio_source_label: String = DEVICE_AUDIO_SOURCE_SYSTEM
+var _android_system_audio_wait_time: float = 0.0
+var _mic_audio_player: AudioStreamPlayer
+var _mic_audio_capture_effect_index: int = -1
+var _mic_audio_capture_instance: AudioEffectCapture
 var _game_audio_spectrum_effect_index: int = -1
 var _game_audio_spectrum_instance: AudioEffectSpectrumAnalyzerInstance
 var _ball_material: StandardMaterial3D
@@ -203,6 +212,7 @@ func _ready() -> void:
 func _exit_tree() -> void:
 	if _device_audio_analyzer != null and _device_audio_analyzer.has_method("stop"):
 		_device_audio_analyzer.call("stop")
+	_teardown_mic_audio_fallback()
 	_teardown_game_audio_spectrum_fallback()
 
 func _notification(what: int) -> void:
@@ -1360,6 +1370,14 @@ static func device_audio_debug_text(available: bool, energy: float, pulse: float
 static func game_audio_energy_from_magnitude(magnitude: Vector2) -> float:
 	return clampf(magnitude.length() * GAME_AUDIO_ENERGY_GAIN, 0.0, 1.0)
 
+static func mic_audio_energy_from_frames(frames: PackedVector2Array) -> float:
+	if frames.is_empty():
+		return 0.0
+	var sum := 0.0
+	for frame in frames:
+		sum += frame.length_squared() * 0.5
+	return clampf(sqrt(sum / float(frames.size())) * MIC_AUDIO_ENERGY_GAIN, 0.0, 1.0)
+
 static func signal_gate_hit_strength(hit_timer: float) -> float:
 	return clampf(hit_timer / SIGNAL_GATE_HIT_DURATION, 0.0, 1.0)
 
@@ -1400,10 +1418,13 @@ func _step_tunnel_texture_motion(delta: float) -> void:
 	_tunnel_material.set_shader_parameter("tunnel_phase", _tunnel_texture_phase)
 
 func _setup_device_audio_analyzer() -> void:
+	if OS.get_environment(DEVICE_AUDIO_DISABLE_ENV) == "1":
+		return
+	if OS.get_name() == "Android":
+		_setup_android_system_audio_capture()
+		return
 	if OS.get_name() != "Windows":
 		_setup_game_audio_spectrum_fallback()
-		return
-	if OS.get_environment(DEVICE_AUDIO_DISABLE_ENV) == "1":
 		return
 	if not ClassDB.class_exists(DEVICE_AUDIO_ANALYZER_CLASS):
 		return
@@ -1414,6 +1435,60 @@ func _setup_device_audio_analyzer() -> void:
 	if _device_audio_analyzer.has_method("start"):
 		_device_audio_analyzer.call("start")
 	_device_audio_source_label = DEVICE_AUDIO_SOURCE_SYSTEM
+
+func _setup_android_system_audio_capture() -> void:
+	_device_audio_source_label = DEVICE_AUDIO_SOURCE_SYSTEM
+	_android_system_audio_wait_time = 0.0
+	if not Engine.has_singleton(ANDROID_SYSTEM_AUDIO_SINGLETON):
+		_setup_mic_audio_fallback()
+		return
+	var analyzer := Engine.get_singleton(ANDROID_SYSTEM_AUDIO_SINGLETON)
+	if analyzer == null:
+		_setup_mic_audio_fallback()
+		return
+	_device_audio_analyzer = analyzer
+	if _device_audio_analyzer.has_method("request_capture"):
+		_device_audio_analyzer.call("request_capture")
+
+func _setup_mic_audio_fallback() -> void:
+	if _mic_audio_capture_instance != null:
+		return
+	_device_audio_source_label = DEVICE_AUDIO_SOURCE_MIC
+	if OS.has_method("request_permissions"):
+		OS.request_permissions()
+	var bus_index := AudioServer.get_bus_index(MIC_AUDIO_CAPTURE_BUS)
+	if bus_index < 0:
+		bus_index = AudioServer.get_bus_count()
+		AudioServer.add_bus(bus_index)
+		AudioServer.set_bus_name(bus_index, MIC_AUDIO_CAPTURE_BUS)
+	AudioServer.set_bus_volume_db(bus_index, -80.0)
+	var effect := AudioEffectCapture.new()
+	effect.resource_name = "WormBreakerMicAudioPulse"
+	effect.buffer_length = 0.25
+	_mic_audio_capture_effect_index = AudioServer.get_bus_effect_count(bus_index)
+	AudioServer.add_bus_effect(bus_index, effect, _mic_audio_capture_effect_index)
+	_mic_audio_capture_instance = AudioServer.get_bus_effect(bus_index, _mic_audio_capture_effect_index) as AudioEffectCapture
+	_mic_audio_player = AudioStreamPlayer.new()
+	_mic_audio_player.name = "MicAudioPulseInput"
+	_mic_audio_player.stream = AudioStreamMicrophone.new()
+	_mic_audio_player.bus = MIC_AUDIO_CAPTURE_BUS
+	_mic_audio_player.volume_db = -80.0
+	add_child(_mic_audio_player)
+	_mic_audio_player.play()
+
+func _teardown_mic_audio_fallback() -> void:
+	if _mic_audio_player != null and is_instance_valid(_mic_audio_player):
+		_mic_audio_player.stop()
+		_mic_audio_player.queue_free()
+	_mic_audio_player = null
+	if _mic_audio_capture_effect_index < 0:
+		_mic_audio_capture_instance = null
+		return
+	var bus_index := AudioServer.get_bus_index(MIC_AUDIO_CAPTURE_BUS)
+	if bus_index >= 0 and _mic_audio_capture_effect_index < AudioServer.get_bus_effect_count(bus_index):
+		AudioServer.remove_bus_effect(bus_index, _mic_audio_capture_effect_index)
+	_mic_audio_capture_effect_index = -1
+	_mic_audio_capture_instance = null
 
 func _setup_game_audio_spectrum_fallback() -> void:
 	_device_audio_source_label = DEVICE_AUDIO_SOURCE_GAME
@@ -1440,6 +1515,20 @@ func _step_device_audio_pulse(delta: float) -> void:
 	var next_state := {}
 	if _device_audio_analyzer != null:
 		next_state = device_audio_pulse_for_analyzer(_device_audio_analyzer, _device_audio_pulse, _device_audio_energy, delta)
+		if not bool(next_state.get("available", false)) and OS.get_name() == "Android":
+			var permission_pending := false
+			if _device_audio_analyzer.has_method("is_permission_pending"):
+				permission_pending = bool(_device_audio_analyzer.call("is_permission_pending"))
+			if not permission_pending:
+				_android_system_audio_wait_time += delta
+			if _android_system_audio_wait_time >= ANDROID_SYSTEM_AUDIO_FALLBACK_DELAY:
+				if _device_audio_analyzer.has_method("stop"):
+					_device_audio_analyzer.call("stop")
+				_device_audio_analyzer = null
+				_setup_mic_audio_fallback()
+				next_state = _mic_audio_pulse_state(delta)
+	elif _mic_audio_capture_instance != null:
+		next_state = _mic_audio_pulse_state(delta)
 	elif _game_audio_spectrum_instance != null:
 		var magnitude := _game_audio_spectrum_instance.get_magnitude_for_frequency_range(
 			GAME_AUDIO_SPECTRUM_MIN_HZ,
@@ -1460,6 +1549,25 @@ func _step_device_audio_pulse(delta: float) -> void:
 	_device_audio_pulse = float(next_state.get("pulse", 0.0))
 	if _tunnel_material != null:
 		_tunnel_material.set_shader_parameter("device_audio_pulse", _device_audio_pulse)
+
+func _mic_audio_pulse_state(delta: float) -> Dictionary:
+	if _mic_audio_capture_instance == null:
+		return device_audio_pulse_for_analyzer(null, _device_audio_pulse, _device_audio_energy, delta)
+	var available_frames := _mic_audio_capture_instance.get_frames_available()
+	if available_frames <= 0:
+		return {
+			"available": true,
+			"energy": 0.0,
+			"pulse": smoothed_device_audio_pulse(_device_audio_pulse, 0.0, delta)
+		}
+	var frames := _mic_audio_capture_instance.get_buffer(mini(available_frames, 2048))
+	var energy := mic_audio_energy_from_frames(frames)
+	var target_pulse := device_audio_pulse_target(energy, _device_audio_energy)
+	return {
+		"available": true,
+		"energy": energy,
+		"pulse": smoothed_device_audio_pulse(_device_audio_pulse, target_pulse, delta)
+	}
 
 func _build_device_audio_debug_label() -> void:
 	_device_audio_debug_label = Label.new()
