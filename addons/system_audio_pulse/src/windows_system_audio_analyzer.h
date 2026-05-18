@@ -19,6 +19,9 @@ public:
 	bool is_available() const;
 	double get_energy() const;
 	double get_pulse() const;
+	double get_bass() const;
+	double get_mid() const;
+	double get_treble() const;
 
 protected:
 	static void _bind_methods();
@@ -32,6 +35,9 @@ private:
 	std::atomic<bool> available;
 	std::atomic<double> energy;
 	std::atomic<double> pulse;
+	std::atomic<double> bass;
+	std::atomic<double> mid;
+	std::atomic<double> treble;
 };
 
 } // namespace godot

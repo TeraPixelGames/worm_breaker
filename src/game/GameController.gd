@@ -162,6 +162,9 @@ var _device_audio_analyzer: Object
 var _device_audio_available: bool = false
 var _device_audio_energy: float = 0.0
 var _device_audio_pulse: float = 0.0
+var _device_audio_bass: float = 0.0
+var _device_audio_mid: float = 0.0
+var _device_audio_treble: float = 0.0
 var _device_audio_debug_label: Label
 var _web_audio_connect_button: Button
 var _device_audio_source_label: String = DEVICE_AUDIO_SOURCE_SYSTEM
@@ -525,6 +528,9 @@ func _refresh_tunnel_visual() -> void:
 	tunnel_material.set_shader_parameter("intensity", 0.86)
 	tunnel_material.set_shader_parameter("hue_shift", 0.0)
 	tunnel_material.set_shader_parameter("device_audio_pulse", _device_audio_pulse)
+	tunnel_material.set_shader_parameter("audio_bass", _device_audio_bass)
+	tunnel_material.set_shader_parameter("audio_mid", _device_audio_mid)
+	tunnel_material.set_shader_parameter("audio_treble", _device_audio_treble)
 	tunnel_material.set_shader_parameter("base_color", Color(0.018, 0.0, 0.055, 1.0))
 	tunnel_material.set_shader_parameter("near_color", Color(0.0, 0.9, 0.95, 1.0))
 	tunnel_material.set_shader_parameter("far_color", Color(1.0, 0.1, 0.95, 1.0))
@@ -1162,7 +1168,7 @@ func _update_psychedelic_materials() -> void:
 	if _tunnel_material != null:
 		var hue := fmod(0.76 + sin(_visual_time * 0.17) * 0.08, 1.0)
 		var pulse := 0.5 + 0.5 * sin(_visual_time * 0.9)
-		var audio_intensity := _device_audio_pulse * 0.92
+		var audio_intensity := _device_audio_pulse * 0.58 + _device_audio_bass * 0.42
 		_tunnel_material.set_shader_parameter("hue_shift", hue)
 		_tunnel_material.set_shader_parameter("intensity", 0.78 + pulse * 0.26 + audio_intensity)
 		_tunnel_material.set_shader_parameter("near_color", Color.from_hsv(fmod(hue + 0.48, 1.0), 0.74, 1.0))
@@ -1183,11 +1189,12 @@ func _update_psychedelic_materials() -> void:
 		material.emission_energy_multiplier = 0.65 + 0.28 * absf(sin(_visual_time * 2.4 + float(i))) + flash_boost
 	if _portal_fractal_material != null and not _pending_transition:
 		var portal_pulse := 0.5 + 0.5 * sin(_visual_time * 1.1)
-		_portal_fractal_material.set_shader_parameter("alpha", 0.58 + portal_pulse * 0.12)
-		_portal_fractal_material.set_shader_parameter("zoom", 2.45 + portal_pulse * 0.24)
+		_portal_fractal_material.set_shader_parameter("alpha", 0.58 + portal_pulse * 0.12 + _device_audio_mid * 0.14)
+		_portal_fractal_material.set_shader_parameter("zoom", 2.45 + portal_pulse * 0.24 + _device_audio_mid * 0.32)
 	if _portal_material != null and not _pending_transition:
 		var gate_pulse := 0.5 + 0.5 * sin(_visual_time * 2.0)
-		_portal_material.set_shader_parameter("alpha", 0.28 + gate_pulse * 0.08)
+		_portal_material.set_shader_parameter("alpha", 0.28 + gate_pulse * 0.08 + _device_audio_treble * 0.12)
+		_portal_material.set_shader_parameter("audio_treble", _device_audio_treble)
 	if key_light != null:
 		key_light.light_color = Color.from_hsv(fmod(0.81 + _visual_time * 0.035, 1.0), 0.6, 1.0)
 	if fill_light != null:
@@ -1477,7 +1484,10 @@ static func device_audio_pulse_for_analyzer(analyzer: Object, current_pulse: flo
 		return {
 			"available": false,
 			"energy": 0.0,
-			"pulse": smoothed_device_audio_pulse(current_pulse, 0.0, delta)
+			"pulse": smoothed_device_audio_pulse(current_pulse, 0.0, delta),
+			"bass": 0.0,
+			"mid": 0.0,
+			"treble": 0.0
 		}
 	var energy := maxf(float(analyzer.call("get_energy")), 0.0)
 	var native_pulse := 0.0
@@ -1487,8 +1497,23 @@ static func device_audio_pulse_for_analyzer(analyzer: Object, current_pulse: flo
 	return {
 		"available": true,
 		"energy": energy,
-		"pulse": smoothed_device_audio_pulse(current_pulse, target_pulse, delta)
+		"pulse": smoothed_device_audio_pulse(current_pulse, target_pulse, delta),
+		"bass": _analyzer_band(analyzer, "get_bass", energy),
+		"mid": _analyzer_band(analyzer, "get_mid", energy),
+		"treble": _analyzer_band(analyzer, "get_treble", energy)
 	}
+
+static func device_audio_band_state(bass: float, mid: float, treble: float) -> Dictionary:
+	return {
+		"bass": clampf(bass, 0.0, 1.0),
+		"mid": clampf(mid, 0.0, 1.0),
+		"treble": clampf(treble, 0.0, 1.0)
+	}
+
+static func _analyzer_band(analyzer: Object, method_name: StringName, fallback_energy: float) -> float:
+	if analyzer != null and _analyzer_has_method(analyzer, method_name):
+		return clampf(float(analyzer.call(method_name)), 0.0, 1.0)
+	return clampf(fallback_energy, 0.0, 1.0)
 
 static func _analyzer_has_method(analyzer: Object, method_name: StringName) -> bool:
 	if analyzer == null:
@@ -1501,6 +1526,9 @@ static func _analyzer_has_method(analyzer: Object, method_name: StringName) -> b
 		&"is_permission_pending",
 		&"get_energy",
 		&"get_pulse",
+		&"get_bass",
+		&"get_mid",
+		&"get_treble",
 		&"stop"
 	]:
 		return true
@@ -1508,7 +1536,7 @@ static func _analyzer_has_method(analyzer: Object, method_name: StringName) -> b
 		return bool(analyzer.call("has_java_method", method_name))
 	return false
 
-static func device_audio_debug_text(available: bool, energy: float, pulse: float, source_label: String = DEVICE_AUDIO_SOURCE_SYSTEM, bpm: float = -1.0, bpm_confidence: float = 0.0, tunnel_speed: float = -1.0) -> String:
+static func device_audio_debug_text(available: bool, energy: float, pulse: float, source_label: String = DEVICE_AUDIO_SOURCE_SYSTEM, bpm: float = -1.0, bpm_confidence: float = 0.0, tunnel_speed: float = -1.0, bass: float = -1.0, mid: float = -1.0, treble: float = -1.0) -> String:
 	var text := "%s %s  E %.4f  P %.2f" % [
 		source_label,
 		"ON" if available else "OFF",
@@ -1523,6 +1551,12 @@ static func device_audio_debug_text(available: bool, energy: float, pulse: float
 		text += "  BPM %s  C %.2f" % [bpm_text, confidence]
 	if tunnel_speed >= 0.0:
 		text += "  S %.2f" % clampf(tunnel_speed, TUNNEL_TEXTURE_BASE_SPEED, TUNNEL_TEXTURE_MAX_SPEED)
+	if bass >= 0.0 or mid >= 0.0 or treble >= 0.0:
+		text += "  B %.2f  M %.2f  T %.2f" % [
+			clampf(maxf(bass, 0.0), 0.0, 1.0),
+			clampf(maxf(mid, 0.0), 0.0, 1.0),
+			clampf(maxf(treble, 0.0), 0.0, 1.0)
+		]
 	return text
 
 
@@ -1763,6 +1797,7 @@ func _step_device_audio_pulse(delta: float) -> void:
 					"energy": energy,
 					"pulse": smoothed_device_audio_pulse(_device_audio_pulse, target_pulse, delta)
 				}
+				next_state.merge(_game_audio_band_state(), true)
 	elif _mic_audio_capture_instance != null:
 		next_state = _mic_audio_pulse_state(delta)
 	elif _game_audio_spectrum_instance != null:
@@ -1778,16 +1813,35 @@ func _step_device_audio_pulse(delta: float) -> void:
 			"energy": energy,
 			"pulse": smoothed_device_audio_pulse(_device_audio_pulse, target_pulse, delta)
 		}
+		next_state.merge(_game_audio_band_state(), true)
 	else:
 		next_state = device_audio_pulse_for_analyzer(null, _device_audio_pulse, _device_audio_energy, delta)
 	_device_audio_available = bool(next_state.get("available", false))
 	_device_audio_energy = float(next_state.get("energy", 0.0))
 	_device_audio_pulse = float(next_state.get("pulse", 0.0))
+	_device_audio_bass = float(next_state.get("bass", 0.0))
+	_device_audio_mid = float(next_state.get("mid", 0.0))
+	_device_audio_treble = float(next_state.get("treble", 0.0))
 	if OS.has_feature("web") and _device_audio_analyzer != null and analyzer_state_available:
 		_device_audio_source_label = DEVICE_AUDIO_SOURCE_WEB
 	_step_audio_bpm(delta, previous_pulse, previous_energy)
 	if _tunnel_material != null:
 		_tunnel_material.set_shader_parameter("device_audio_pulse", _device_audio_pulse)
+		_tunnel_material.set_shader_parameter("audio_bass", _device_audio_bass)
+		_tunnel_material.set_shader_parameter("audio_mid", _device_audio_mid)
+		_tunnel_material.set_shader_parameter("audio_treble", _device_audio_treble)
+
+func _game_audio_band_state() -> Dictionary:
+	if _game_audio_spectrum_instance == null:
+		return device_audio_band_state(0.0, 0.0, 0.0)
+	var bass_magnitude := _game_audio_spectrum_instance.get_magnitude_for_frequency_range(40.0, 180.0, AudioEffectSpectrumAnalyzerInstance.MAGNITUDE_AVERAGE)
+	var mid_magnitude := _game_audio_spectrum_instance.get_magnitude_for_frequency_range(180.0, 2200.0, AudioEffectSpectrumAnalyzerInstance.MAGNITUDE_AVERAGE)
+	var treble_magnitude := _game_audio_spectrum_instance.get_magnitude_for_frequency_range(2200.0, 9000.0, AudioEffectSpectrumAnalyzerInstance.MAGNITUDE_AVERAGE)
+	return device_audio_band_state(
+		game_audio_energy_from_magnitude(bass_magnitude) * 1.4,
+		game_audio_energy_from_magnitude(mid_magnitude) * 1.15,
+		game_audio_energy_from_magnitude(treble_magnitude) * 1.35
+	)
 
 func _mic_audio_pulse_state(delta: float) -> Dictionary:
 	if _mic_audio_capture_instance == null:
@@ -1797,7 +1851,10 @@ func _mic_audio_pulse_state(delta: float) -> Dictionary:
 		return {
 			"available": true,
 			"energy": 0.0,
-			"pulse": smoothed_device_audio_pulse(_device_audio_pulse, 0.0, delta)
+			"pulse": smoothed_device_audio_pulse(_device_audio_pulse, 0.0, delta),
+			"bass": 0.0,
+			"mid": 0.0,
+			"treble": 0.0
 		}
 	var frames := _mic_audio_capture_instance.get_buffer(mini(available_frames, 2048))
 	var energy := mic_audio_energy_from_frames(frames)
@@ -1805,7 +1862,10 @@ func _mic_audio_pulse_state(delta: float) -> Dictionary:
 	return {
 		"available": true,
 		"energy": energy,
-		"pulse": smoothed_device_audio_pulse(_device_audio_pulse, target_pulse, delta)
+		"pulse": smoothed_device_audio_pulse(_device_audio_pulse, target_pulse, delta),
+		"bass": clampf(energy * 1.2, 0.0, 1.0),
+		"mid": clampf(energy * 0.85, 0.0, 1.0),
+		"treble": clampf(energy * 0.55, 0.0, 1.0)
 	}
 
 func _build_device_audio_debug_label() -> void:
@@ -2052,7 +2112,7 @@ func _update_hud() -> void:
 	phase_label.text = "%s  %d/%d" % [phase, destroyed, _initial_brick_count]
 	combo_label.text = hud_pulse_text(_chain_combo)
 	if _device_audio_debug_label != null:
-		_device_audio_debug_label.text = device_audio_debug_text(_device_audio_available, _device_audio_energy, _device_audio_pulse, _device_audio_source_label, _audio_bpm, _audio_bpm_confidence, _tunnel_texture_speed)
+		_device_audio_debug_label.text = device_audio_debug_text(_device_audio_available, _device_audio_energy, _device_audio_pulse, _device_audio_source_label, _audio_bpm, _audio_bpm_confidence, _tunnel_texture_speed, _device_audio_bass, _device_audio_mid, _device_audio_treble)
 	if _web_audio_connect_button != null:
 		var web_status := ""
 		if _device_audio_analyzer != null and _analyzer_has_method(_device_audio_analyzer, "get_status"):

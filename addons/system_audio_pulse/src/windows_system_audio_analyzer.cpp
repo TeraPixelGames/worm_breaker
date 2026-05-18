@@ -102,6 +102,44 @@ double rms_energy(const BYTE *p_data, UINT32 p_frames, DWORD p_flags, const WAVE
 	}
 	return std::sqrt(sum / static_cast<double>(sample_count));
 }
+
+void estimate_time_bands(const BYTE *p_data, UINT32 p_frames, DWORD p_flags, const WAVEFORMATEX *p_format, double &r_bass, double &r_mid, double &r_treble) {
+	r_bass = 0.0;
+	r_mid = 0.0;
+	r_treble = 0.0;
+	if ((p_flags & AUDCLNT_BUFFERFLAGS_SILENT) != 0 || p_data == nullptr || p_format == nullptr || p_frames == 0) {
+		return;
+	}
+
+	const UINT32 channels = std::max<UINT32>(p_format->nChannels, 1);
+	double low_sum = 0.0;
+	double mid_sum = 0.0;
+	double high_sum = 0.0;
+	double previous = 0.0;
+	double previous_delta = 0.0;
+	UINT32 count = 0;
+	for (UINT32 frame = 0; frame < p_frames; ++frame) {
+		double mono = 0.0;
+		for (UINT32 channel = 0; channel < channels; ++channel) {
+			const UINT32 sample_index = frame * channels + channel;
+			mono += std::clamp(sample_as_float(p_data, sample_index, p_format), -1.0, 1.0);
+		}
+		mono /= static_cast<double>(channels);
+		const double delta = mono - previous;
+		const double second_delta = delta - previous_delta;
+		low_sum += mono * mono;
+		mid_sum += delta * delta;
+		high_sum += second_delta * second_delta;
+		previous = mono;
+		previous_delta = delta;
+		++count;
+	}
+
+	const double safe_count = static_cast<double>(std::max<UINT32>(count, 1));
+	r_bass = std::clamp(std::sqrt(low_sum / safe_count) * 2.4, 0.0, 1.0);
+	r_mid = std::clamp(std::sqrt(mid_sum / safe_count) * 7.0, 0.0, 1.0);
+	r_treble = std::clamp(std::sqrt(high_sum / safe_count) * 10.0, 0.0, 1.0);
+}
 #endif
 
 } // namespace
@@ -110,7 +148,10 @@ WindowsSystemAudioAnalyzer::WindowsSystemAudioAnalyzer() :
 		running(false),
 		available(false),
 		energy(0.0),
-		pulse(0.0) {
+		pulse(0.0),
+		bass(0.0),
+		mid(0.0),
+		treble(0.0) {
 }
 
 WindowsSystemAudioAnalyzer::~WindowsSystemAudioAnalyzer() {
@@ -123,6 +164,9 @@ void WindowsSystemAudioAnalyzer::_bind_methods() {
 	ClassDB::bind_method(D_METHOD("is_available"), &WindowsSystemAudioAnalyzer::is_available);
 	ClassDB::bind_method(D_METHOD("get_energy"), &WindowsSystemAudioAnalyzer::get_energy);
 	ClassDB::bind_method(D_METHOD("get_pulse"), &WindowsSystemAudioAnalyzer::get_pulse);
+	ClassDB::bind_method(D_METHOD("get_bass"), &WindowsSystemAudioAnalyzer::get_bass);
+	ClassDB::bind_method(D_METHOD("get_mid"), &WindowsSystemAudioAnalyzer::get_mid);
+	ClassDB::bind_method(D_METHOD("get_treble"), &WindowsSystemAudioAnalyzer::get_treble);
 }
 
 bool WindowsSystemAudioAnalyzer::start() {
@@ -134,6 +178,9 @@ bool WindowsSystemAudioAnalyzer::start() {
 	available.store(false);
 	energy.store(0.0);
 	pulse.store(0.0);
+	bass.store(0.0);
+	mid.store(0.0);
+	treble.store(0.0);
 	capture_thread = std::thread(&WindowsSystemAudioAnalyzer::_capture_loop, this);
 	return true;
 }
@@ -146,6 +193,9 @@ void WindowsSystemAudioAnalyzer::stop() {
 	available.store(false);
 	energy.store(0.0);
 	pulse.store(0.0);
+	bass.store(0.0);
+	mid.store(0.0);
+	treble.store(0.0);
 }
 
 bool WindowsSystemAudioAnalyzer::is_available() const {
@@ -160,10 +210,25 @@ double WindowsSystemAudioAnalyzer::get_pulse() const {
 	return pulse.load();
 }
 
+double WindowsSystemAudioAnalyzer::get_bass() const {
+	return bass.load();
+}
+
+double WindowsSystemAudioAnalyzer::get_mid() const {
+	return mid.load();
+}
+
+double WindowsSystemAudioAnalyzer::get_treble() const {
+	return treble.load();
+}
+
 void WindowsSystemAudioAnalyzer::_set_unavailable() {
 	available.store(false);
 	energy.store(0.0);
 	pulse.store(0.0);
+	bass.store(0.0);
+	mid.store(0.0);
+	treble.store(0.0);
 }
 
 void WindowsSystemAudioAnalyzer::_capture_loop() {
@@ -235,6 +300,9 @@ void WindowsSystemAudioAnalyzer::_capture_loop() {
 		}
 
 		double latest_energy = 0.0;
+		double latest_bass = 0.0;
+		double latest_mid = 0.0;
+		double latest_treble = 0.0;
 		bool saw_packet = false;
 		while (packet_frames > 0) {
 			BYTE *data = nullptr;
@@ -245,6 +313,7 @@ void WindowsSystemAudioAnalyzer::_capture_loop() {
 				break;
 			}
 			latest_energy = rms_energy(data, frames, flags, mix_format);
+			estimate_time_bands(data, frames, flags, mix_format, latest_bass, latest_mid, latest_treble);
 			saw_packet = true;
 			capture_client->ReleaseBuffer(frames);
 			hr = capture_client->GetNextPacketSize(&packet_frames);
@@ -262,12 +331,18 @@ void WindowsSystemAudioAnalyzer::_capture_loop() {
 
 		if (!saw_packet) {
 			latest_energy = 0.0;
+			latest_bass = 0.0;
+			latest_mid = 0.0;
+			latest_treble = 0.0;
 		}
 		const double target = pulse_target_for_energy(latest_energy, previous_energy);
 		current_pulse = smooth_pulse(current_pulse, target, elapsed.count());
 		previous_energy = latest_energy;
 		energy.store(latest_energy);
 		pulse.store(current_pulse);
+		bass.store(latest_bass);
+		mid.store(latest_mid);
+		treble.store(latest_treble);
 
 		std::this_thread::sleep_for(std::chrono::milliseconds(10));
 	}

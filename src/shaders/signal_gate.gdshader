@@ -10,6 +10,7 @@ render_mode unshaded, blend_add, cull_disabled, depth_draw_never;
 uniform float gate_time = 0.0;
 uniform float hit_strength : hint_range(0.0, 1.0) = 0.0;
 uniform float break_progress : hint_range(0.0, 1.0) = 0.0;
+uniform float audio_treble : hint_range(0.0, 1.0) = 0.0;
 uniform float alpha : hint_range(0.0, 1.0) = 0.56;
 uniform vec4 gate_color : source_color = vec4(0.05, 1.0, 0.95, 1.0);
 uniform vec4 hit_color : source_color = vec4(1.0, 0.92, 0.18, 1.0);
@@ -62,14 +63,14 @@ void fragment() {
 	float primary_current = electric_thread(angular_uv, gate_time * 3.2, 0.0);
 	float counter_current = electric_thread(vec2(-angular_uv.x, angular_uv.y * 1.18), gate_time * 2.6, 4.7);
 	float radial_noise = fbm(vec2(angle * 2.4, radius * 8.5 - gate_time * 5.0));
-	float branching = smoothstep(0.68, 0.98, abs(sin(angle * 11.0 + radius * 13.0 + radial_noise * 7.0 + gate_time * 10.0)));
+	float branching = smoothstep(0.68 - audio_treble * 0.16, 0.98, abs(sin(angle * (11.0 + audio_treble * 4.0) + radius * 13.0 + radial_noise * 7.0 + gate_time * (10.0 + audio_treble * 6.0))));
 	float collision_current = max(primary_current, counter_current * 0.8) * branching;
 	collision_current *= smoothstep(0.98, 0.28, radius) * smoothstep(0.07, 0.26, radius);
 	collision_current *= hit_strength;
 
 	float shock_radius = mix(0.16, 0.88, impact_age);
 	float shock_ring = smoothstep(0.075, 0.0, abs(radius - shock_radius)) * hit_strength;
-	float fork_line = smoothstep(0.985 - hit_strength * 0.22, 1.0, abs(sin(angle * 6.0 + radial_noise * 8.0 + gate_time * 18.0))) * hit_strength;
+	float fork_line = smoothstep(0.985 - hit_strength * 0.22 - audio_treble * 0.12, 1.0, abs(sin(angle * 6.0 + radial_noise * 8.0 + gate_time * 18.0))) * max(hit_strength, audio_treble * 0.38);
 	float electric = max(collision_current, max(shock_ring, fork_line * smoothstep(0.22, 0.96, radius)));
 
 	float crack_noise = fbm(uv * 8.0 + gate_time);
@@ -87,5 +88,5 @@ void fragment() {
 
 	ALBEDO = color;
 	EMISSION = color * (1.15 + electric * 4.8 + hit_strength * 1.8 + break_progress * 1.8);
-	ALPHA = clamp(visibility, 0.0, 1.0);
+	ALPHA = clamp(visibility + audio_treble * rim * 0.18, 0.0, 1.0);
 }

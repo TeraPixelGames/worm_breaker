@@ -41,6 +41,9 @@ public final class AndroidSystemAudioCapturePlugin extends GodotPlugin {
 	private volatile boolean permissionPending = false;
 	private volatile double energy = 0.0;
 	private volatile double pulse = 0.0;
+	private volatile double bass = 0.0;
+	private volatile double mid = 0.0;
+	private volatile double treble = 0.0;
 	private double waveformEnergyFloor = 0.0;
 	private Visualizer visualizer;
 	private MediaProjection mediaProjection;
@@ -58,7 +61,7 @@ public final class AndroidSystemAudioCapturePlugin extends GodotPlugin {
 
 	@Override
 	public List<String> getPluginMethods() {
-		return Arrays.asList("request_capture", "request_media_projection_capture", "stop", "is_available", "is_permission_pending", "get_energy", "get_pulse");
+		return Arrays.asList("request_capture", "request_media_projection_capture", "stop", "is_available", "is_permission_pending", "get_energy", "get_pulse", "get_bass", "get_mid", "get_treble");
 	}
 
 	@UsedByGodot
@@ -147,6 +150,21 @@ public final class AndroidSystemAudioCapturePlugin extends GodotPlugin {
 		return pulse;
 	}
 
+	@UsedByGodot
+	public double get_bass() {
+		return bass;
+	}
+
+	@UsedByGodot
+	public double get_mid() {
+		return mid;
+	}
+
+	@UsedByGodot
+	public double get_treble() {
+		return treble;
+	}
+
 	@Override
 	public void onMainActivityResult(int requestCode, int resultCode, Intent data) {
 		if (requestCode != REQUEST_MEDIA_PROJECTION) {
@@ -228,9 +246,9 @@ public final class AndroidSystemAudioCapturePlugin extends GodotPlugin {
 
 				@Override
 				public void onFftDataCapture(Visualizer visualizer, byte[] fft, int samplingRate) {
-					// Waveform data gives the most stable low-latency energy signal for gameplay.
+					updateFromFft(fft);
 				}
-			}, Visualizer.getMaxCaptureRate() / 2, true, false);
+			}, Visualizer.getMaxCaptureRate() / 2, true, true);
 			outputMixVisualizer.setEnabled(true);
 			visualizer = outputMixVisualizer;
 			running.set(true);
@@ -267,6 +285,15 @@ public final class AndroidSystemAudioCapturePlugin extends GodotPlugin {
 		available = true;
 	}
 
+	private void updateFromFft(byte[] fft) {
+		if (fft == null || fft.length < 4) {
+			return;
+		}
+		bass = fftBandLevel(fft, 1, 6, 2.8);
+		mid = fftBandLevel(fft, 7, 30, 2.0);
+		treble = fftBandLevel(fft, 31, Math.min(120, (fft.length / 2) - 1), 2.5);
+	}
+
 	private void captureLoop(int sampleCapacity) {
 		float[] buffer = new float[Math.max(sampleCapacity, 1024)];
 		double previousEnergy = 0.0;
@@ -283,6 +310,7 @@ public final class AndroidSystemAudioCapturePlugin extends GodotPlugin {
 				sum += sample * sample;
 			}
 			double latestEnergy = Math.sqrt(sum / (double) read);
+			updateTimeBands(buffer, read);
 			long now = System.nanoTime();
 			double delta = (now - previousNanos) / 1_000_000_000.0;
 			previousNanos = now;
@@ -308,6 +336,57 @@ public final class AndroidSystemAudioCapturePlugin extends GodotPlugin {
 		return Math.max(0.0, Math.min(1.0, currentFloor + (clampedEnergy - currentFloor) * rate));
 	}
 
+	private static double fftBandLevel(byte[] fft, int startBin, int endBin, double gain) {
+		int maxBin = Math.max(1, (fft.length / 2) - 1);
+		int start = Math.max(1, Math.min(maxBin, startBin));
+		int end = Math.max(start, Math.min(maxBin, endBin));
+		double sum = 0.0;
+		double peak = 0.0;
+		int count = 0;
+		for (int bin = start; bin <= end; bin++) {
+			int index = bin * 2;
+			if (index + 1 >= fft.length) {
+				break;
+			}
+			double real = (double) fft[index];
+			double imag = (double) fft[index + 1];
+			double magnitude = Math.min(1.0, Math.sqrt(real * real + imag * imag) / 181.0);
+			sum += magnitude * magnitude;
+			peak = Math.max(peak, magnitude);
+			count++;
+		}
+		double rms = Math.sqrt(sum / Math.max(1, count));
+		return Math.max(0.0, Math.min(1.0, Math.max(rms * gain, peak * gain * 0.45)));
+	}
+
+	private void updateTimeBands(float[] buffer, int read) {
+		if (buffer == null || read <= 0) {
+			bass = 0.0;
+			mid = 0.0;
+			treble = 0.0;
+			return;
+		}
+		double lowSum = 0.0;
+		double midSum = 0.0;
+		double highSum = 0.0;
+		double previous = 0.0;
+		double previousDelta = 0.0;
+		for (int i = 0; i < read; i++) {
+			double sample = Math.max(-1.0, Math.min(1.0, buffer[i]));
+			double delta = sample - previous;
+			double secondDelta = delta - previousDelta;
+			lowSum += sample * sample;
+			midSum += delta * delta;
+			highSum += secondDelta * secondDelta;
+			previous = sample;
+			previousDelta = delta;
+		}
+		double count = Math.max(1.0, (double) read);
+		bass = Math.max(0.0, Math.min(1.0, Math.sqrt(lowSum / count) * 2.4));
+		mid = Math.max(0.0, Math.min(1.0, Math.sqrt(midSum / count) * 7.0));
+		treble = Math.max(0.0, Math.min(1.0, Math.sqrt(highSum / count) * 10.0));
+	}
+
 	private static double smoothPulse(double currentPulse, double targetPulse, double delta) {
 		double rate = targetPulse > currentPulse ? ATTACK : DECAY;
 		double weight = 1.0 - Math.exp(-rate * Math.max(delta, 0.0));
@@ -320,6 +399,9 @@ public final class AndroidSystemAudioCapturePlugin extends GodotPlugin {
 		permissionPending = false;
 		energy = 0.0;
 		pulse = 0.0;
+		bass = 0.0;
+		mid = 0.0;
+		treble = 0.0;
 		waveformEnergyFloor = 0.0;
 	}
 }

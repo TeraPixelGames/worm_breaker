@@ -8,6 +8,9 @@ class DummyAnalyzer:
 	var available := true
 	var energy := 0.0
 	var pulse := 0.0
+	var bass := 0.0
+	var mid := 0.0
+	var treble := 0.0
 
 	func is_available() -> bool:
 		return available
@@ -17,6 +20,15 @@ class DummyAnalyzer:
 
 	func get_pulse() -> float:
 		return pulse
+
+	func get_bass() -> float:
+		return bass
+
+	func get_mid() -> float:
+		return mid
+
+	func get_treble() -> float:
+		return treble
 
 func test_device_audio_low_energy_stays_neutral() -> void:
 	var target: float = GameController.device_audio_pulse_target(0.001, 0.0008)
@@ -46,9 +58,21 @@ func test_available_device_audio_analyzer_uses_energy_and_native_pulse() -> void
 	var analyzer := DummyAnalyzer.new()
 	analyzer.energy = 0.08
 	analyzer.pulse = 0.65
+	analyzer.bass = 0.7
+	analyzer.mid = 0.4
+	analyzer.treble = 0.2
 	var state: Dictionary = GameController.device_audio_pulse_for_analyzer(analyzer, 0.0, 0.01, 1.0 / 60.0)
 	assert_equal(float(state.get("energy", 0.0)), 0.08, "Analyzer energy should be surfaced to the pulse state")
 	assert_true(float(state.get("pulse", 0.0)) > 0.0, "Available analyzer pulse should affect the tunnel")
+	assert_equal(float(state.get("bass", 0.0)), 0.7, "Analyzer bass band should be surfaced")
+	assert_equal(float(state.get("mid", 0.0)), 0.4, "Analyzer mid band should be surfaced")
+	assert_equal(float(state.get("treble", 0.0)), 0.2, "Analyzer treble band should be surfaced")
+
+func test_device_audio_band_state_clamps_channels() -> void:
+	var state: Dictionary = GameController.device_audio_band_state(1.4, 0.5, -0.2)
+	assert_equal(float(state.get("bass", 0.0)), 1.0, "Bass band should clamp high values")
+	assert_equal(float(state.get("mid", 0.0)), 0.5, "Mid band should keep valid values")
+	assert_equal(float(state.get("treble", 1.0)), 0.0, "Treble band should clamp low values")
 
 func test_device_audio_debug_text_reports_levels() -> void:
 	var text: String = GameController.device_audio_debug_text(true, 0.12345, 0.678)
@@ -61,6 +85,10 @@ func test_device_audio_debug_text_can_report_bpm() -> void:
 func test_device_audio_debug_text_can_report_tunnel_speed() -> void:
 	var text: String = GameController.device_audio_debug_text(true, 0.12345, 0.678, GameController.DEVICE_AUDIO_SOURCE_SYSTEM, 128.0, 0.7, 1.75)
 	assert_equal(text, "SYS AUDIO ON  E 0.1235  P 0.68  BPM 128  C 0.70  S 1.75", "Debug readout should expose BPM-driven tunnel speed")
+
+func test_device_audio_debug_text_can_report_bands() -> void:
+	var text: String = GameController.device_audio_debug_text(true, 0.12345, 0.678, GameController.DEVICE_AUDIO_SOURCE_SYSTEM, 128.0, 0.7, 1.75, 0.2, 0.4, 0.6)
+	assert_equal(text, "SYS AUDIO ON  E 0.1235  P 0.68  BPM 128  C 0.70  S 1.75  B 0.20  M 0.40  T 0.60", "Debug readout should expose frequency bands")
 
 func test_game_audio_debug_text_reports_fallback_source() -> void:
 	var text: String = GameController.device_audio_debug_text(true, 0.2, 0.4, GameController.DEVICE_AUDIO_SOURCE_GAME)

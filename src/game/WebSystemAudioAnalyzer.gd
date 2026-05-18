@@ -30,6 +30,21 @@ func get_pulse() -> float:
 		return 0.0
 	return clampf(float(JavaScriptBridge.eval("window.WormBreakerWebAudio.getPulse();", true)), 0.0, 1.0)
 
+func get_bass() -> float:
+	if not _ensure_loaded():
+		return 0.0
+	return clampf(float(JavaScriptBridge.eval("window.WormBreakerWebAudio.getBass();", true)), 0.0, 1.0)
+
+func get_mid() -> float:
+	if not _ensure_loaded():
+		return 0.0
+	return clampf(float(JavaScriptBridge.eval("window.WormBreakerWebAudio.getMid();", true)), 0.0, 1.0)
+
+func get_treble() -> float:
+	if not _ensure_loaded():
+		return 0.0
+	return clampf(float(JavaScriptBridge.eval("window.WormBreakerWebAudio.getTreble();", true)), 0.0, 1.0)
+
 func get_status() -> String:
 	if not _ensure_loaded():
 		return "unsupported"

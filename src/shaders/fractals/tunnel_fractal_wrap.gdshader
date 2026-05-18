@@ -9,6 +9,9 @@ uniform float tunnel_phase = 0.0;
 uniform float intensity : hint_range(0.0, 2.0) = 1.0;
 uniform float hue_shift : hint_range(0.0, 1.0) = 0.0;
 uniform float device_audio_pulse : hint_range(0.0, 1.0) = 0.0;
+uniform float audio_bass : hint_range(0.0, 1.0) = 0.0;
+uniform float audio_mid : hint_range(0.0, 1.0) = 0.0;
+uniform float audio_treble : hint_range(0.0, 1.0) = 0.0;
 uniform vec4 base_color : source_color = vec4(0.018, 0.0, 0.055, 1.0);
 uniform vec4 near_color : source_color = vec4(0.02, 0.9, 0.95, 1.0);
 uniform vec4 far_color : source_color = vec4(1.0, 0.1, 0.95, 1.0);
@@ -57,17 +60,21 @@ void fragment() {
 	float ring_wave = abs(sin(depth * 3.14159));
 	float depth_rings = smoothstep(0.86, 1.0, ring_wave);
 	float angular_lines = smoothstep(0.965, 1.0, abs(sin(theta * 6.28318 * 12.0 + fractal * 1.4)));
-	float beat_wave = abs(sin(depth * 3.14159 - device_audio_pulse * 2.4));
-	float beat_rings = smoothstep(0.62 - device_audio_pulse * 0.22, 1.0, beat_wave) * device_audio_pulse;
+	float beat_wave = abs(sin(depth * 3.14159 - device_audio_pulse * 2.4 - audio_bass * 1.2));
+	float beat_rings = smoothstep(0.62 - device_audio_pulse * 0.22 - audio_bass * 0.12, 1.0, beat_wave) * max(device_audio_pulse, audio_bass * 0.72);
+	float mid_landmarks = smoothstep(0.94 - audio_mid * 0.12, 1.0, abs(sin(theta * 6.28318 * 5.0 + depth * 0.6))) * audio_mid;
+	float treble_sparks = smoothstep(0.72, 1.0, noise(wrapped * 7.4 + vec2(audio_treble * 11.0, tunnel_phase * 1.8))) * audio_treble;
 	float flow = smoothstep(0.38, 0.9, fractal);
-	float trace = max(max(depth_rings * 0.56, angular_lines * 0.34), beat_rings * 0.92);
+	float trace = max(max(depth_rings * (0.56 + audio_bass * 0.32), angular_lines * (0.34 + audio_treble * 0.28)), max(beat_rings * 0.92, mid_landmarks * 0.42));
 	float brightness = clamp((flow * 0.52 + trace) * intensity, 0.0, 1.35);
 
 	vec3 color = palette(brightness + fractal * 0.14);
 	color += near_color.rgb * depth_rings * 0.18 * intensity;
-	color += far_color.rgb * angular_lines * 0.10 * intensity;
+	color += far_color.rgb * angular_lines * (0.10 + audio_treble * 0.18) * intensity;
+	color += near_color.rgb * mid_landmarks * 0.24 * intensity;
 	color += mix(near_color.rgb, far_color.rgb, 0.35) * beat_rings * 0.74 * intensity;
+	color += far_color.rgb * treble_sparks * 0.26 * intensity;
 
 	ALBEDO = mix(base_color.rgb, color, 0.72);
-	EMISSION = color * (0.45 + brightness * 1.35 + device_audio_pulse * 1.15);
+	EMISSION = color * (0.45 + brightness * 1.35 + device_audio_pulse * 0.72 + audio_bass * 0.48 + audio_mid * 0.24 + audio_treble * 0.36);
 }
