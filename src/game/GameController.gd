@@ -14,6 +14,7 @@ const FRACTAL_SHADERS: Array[Shader] = [
 const SIGNAL_GATE_SHADER: Shader = preload("res://src/shaders/signal_gate.gdshader")
 const MANDELBROT_PORTAL_SHADER: Shader = preload("res://src/shaders/fractals/mandelbrot_portal.gdshader")
 const TUNNEL_FRACTAL_SHADER: Shader = preload("res://src/shaders/fractals/tunnel_fractal_wrap.gdshader")
+const WebSystemAudioAnalyzer = preload("res://src/game/WebSystemAudioAnalyzer.gd")
 const TUNNEL_FORWARD: Vector3 = Vector3(0.0, 0.0, 1.0)
 const BALL_THETA_RADIUS: float = 0.12
 const BALL_Z_RADIUS: float = 0.34
@@ -86,6 +87,7 @@ const DEVICE_AUDIO_PULSE_ATTACK: float = 32.0
 const DEVICE_AUDIO_PULSE_DECAY: float = 6.8
 const DEVICE_AUDIO_PULSE_MAX: float = 1.0
 const DEVICE_AUDIO_SOURCE_SYSTEM := "SYS AUDIO"
+const DEVICE_AUDIO_SOURCE_WEB := "WEB AUDIO"
 const DEVICE_AUDIO_SOURCE_MIC := "MIC AUDIO"
 const DEVICE_AUDIO_SOURCE_GAME := "GAME AUDIO"
 const GAME_AUDIO_SPECTRUM_BUS := "Master"
@@ -161,6 +163,7 @@ var _device_audio_available: bool = false
 var _device_audio_energy: float = 0.0
 var _device_audio_pulse: float = 0.0
 var _device_audio_debug_label: Label
+var _web_audio_connect_button: Button
 var _device_audio_source_label: String = DEVICE_AUDIO_SOURCE_SYSTEM
 var _audio_bpm: float = AUDIO_BPM_DEFAULT
 var _audio_bpm_confidence: float = 0.0
@@ -235,13 +238,14 @@ func _ready() -> void:
 	_build_tutorial_overlay()
 	_build_tunnel_end_portal()
 	_build_device_audio_debug_label()
+	_build_web_audio_connect_button()
 	_setup_device_audio_analyzer()
 	_build_paddle_segments()
 	_load_level(max(1, RunManager.current_level_index))
 	_update_hud()
 
 func _exit_tree() -> void:
-	if _device_audio_analyzer != null and _device_audio_analyzer.has_method("stop"):
+	if _device_audio_analyzer != null and _analyzer_has_method(_device_audio_analyzer, "stop"):
 		_device_audio_analyzer.call("stop")
 	_teardown_mic_audio_fallback()
 	_teardown_game_audio_spectrum_fallback()
@@ -1304,6 +1308,7 @@ func _layout_hud() -> void:
 		_apply_control_rect(message_label, hud_message_rect_for_viewport(viewport_size))
 	_layout_tutorial_overlay()
 	_layout_device_audio_debug_label()
+	_layout_web_audio_connect_button()
 
 func _layout_device_audio_debug_label() -> void:
 	if _device_audio_debug_label == null:
@@ -1314,6 +1319,16 @@ func _layout_device_audio_debug_label() -> void:
 	var x := HUD_DOCK_SAFE_MARGIN
 	var y := maxf(HUD_DOCK_SAFE_MARGIN, viewport_size.y - HUD_DOCK_SAFE_MARGIN - height)
 	_apply_control_rect(_device_audio_debug_label, Rect2(Vector2(x, y), Vector2(width, height)))
+
+func _layout_web_audio_connect_button() -> void:
+	if _web_audio_connect_button == null:
+		return
+	var viewport_size: Vector2 = get_viewport().get_visible_rect().size
+	var width := 196.0
+	var height := 42.0
+	var x := HUD_DOCK_SAFE_MARGIN
+	var y := maxf(HUD_DOCK_SAFE_MARGIN, viewport_size.y - HUD_DOCK_SAFE_MARGIN - 30.0 - 12.0 - height)
+	_apply_control_rect(_web_audio_connect_button, Rect2(Vector2(x, y), Vector2(width, height)))
 
 func _layout_tutorial_overlay() -> void:
 	if _tutorial_overlay == null:
@@ -1590,6 +1605,9 @@ func _setup_device_audio_analyzer() -> void:
 	if OS.get_name() == "Android":
 		_setup_android_system_audio_capture()
 		return
+	if OS.has_feature("web"):
+		_setup_web_system_audio_capture()
+		return
 	if OS.get_name() != "Windows":
 		_setup_game_audio_spectrum_fallback()
 		return
@@ -1602,6 +1620,25 @@ func _setup_device_audio_analyzer() -> void:
 	if _device_audio_analyzer.has_method("start"):
 		_device_audio_analyzer.call("start")
 	_device_audio_source_label = DEVICE_AUDIO_SOURCE_SYSTEM
+
+func _setup_web_system_audio_capture() -> void:
+	_device_audio_source_label = DEVICE_AUDIO_SOURCE_WEB
+	var analyzer := WebSystemAudioAnalyzer.new()
+	if analyzer == null or not analyzer.is_supported():
+		_setup_game_audio_spectrum_fallback()
+		return
+	_device_audio_analyzer = analyzer
+	if _web_audio_connect_button != null:
+		_web_audio_connect_button.visible = true
+
+func _start_web_system_audio_capture() -> void:
+	if not OS.has_feature("web"):
+		return
+	if _device_audio_analyzer == null:
+		_setup_web_system_audio_capture()
+	if _device_audio_analyzer != null and _analyzer_has_method(_device_audio_analyzer, "start"):
+		_device_audio_source_label = DEVICE_AUDIO_SOURCE_WEB
+		_device_audio_analyzer.call("start")
 
 func _setup_android_system_audio_capture() -> void:
 	_device_audio_source_label = DEVICE_AUDIO_SOURCE_SYSTEM
@@ -1669,6 +1706,8 @@ func _teardown_mic_audio_fallback() -> void:
 	_mic_audio_capture_instance = null
 
 func _setup_game_audio_spectrum_fallback() -> void:
+	if _game_audio_spectrum_instance != null:
+		return
 	_device_audio_source_label = DEVICE_AUDIO_SOURCE_GAME
 	var bus_index := AudioServer.get_bus_index(GAME_AUDIO_SPECTRUM_BUS)
 	if bus_index < 0:
@@ -1693,9 +1732,11 @@ func _step_device_audio_pulse(delta: float) -> void:
 	var previous_pulse := _device_audio_pulse
 	var previous_energy := _device_audio_energy
 	var next_state := {}
+	var analyzer_state_available := false
 	if _device_audio_analyzer != null:
 		next_state = device_audio_pulse_for_analyzer(_device_audio_analyzer, _device_audio_pulse, _device_audio_energy, delta)
-		if not bool(next_state.get("available", false)) and OS.get_name() == "Android":
+		analyzer_state_available = bool(next_state.get("available", false))
+		if not analyzer_state_available and OS.get_name() == "Android":
 			var permission_pending := false
 			if _analyzer_has_method(_device_audio_analyzer, "is_permission_pending"):
 				permission_pending = bool(_device_audio_analyzer.call("is_permission_pending"))
@@ -1707,6 +1748,21 @@ func _step_device_audio_pulse(delta: float) -> void:
 				_device_audio_analyzer = null
 				_setup_mic_audio_fallback()
 				next_state = _mic_audio_pulse_state(delta)
+		elif not analyzer_state_available and OS.has_feature("web"):
+			_setup_game_audio_spectrum_fallback()
+			if _game_audio_spectrum_instance != null:
+				var magnitude := _game_audio_spectrum_instance.get_magnitude_for_frequency_range(
+					GAME_AUDIO_SPECTRUM_MIN_HZ,
+					GAME_AUDIO_SPECTRUM_MAX_HZ,
+					AudioEffectSpectrumAnalyzerInstance.MAGNITUDE_AVERAGE
+				)
+				var energy := game_audio_energy_from_magnitude(magnitude)
+				var target_pulse := device_audio_pulse_target(energy, _device_audio_energy)
+				next_state = {
+					"available": true,
+					"energy": energy,
+					"pulse": smoothed_device_audio_pulse(_device_audio_pulse, target_pulse, delta)
+				}
 	elif _mic_audio_capture_instance != null:
 		next_state = _mic_audio_pulse_state(delta)
 	elif _game_audio_spectrum_instance != null:
@@ -1727,6 +1783,8 @@ func _step_device_audio_pulse(delta: float) -> void:
 	_device_audio_available = bool(next_state.get("available", false))
 	_device_audio_energy = float(next_state.get("energy", 0.0))
 	_device_audio_pulse = float(next_state.get("pulse", 0.0))
+	if OS.has_feature("web") and _device_audio_analyzer != null and analyzer_state_available:
+		_device_audio_source_label = DEVICE_AUDIO_SOURCE_WEB
 	_step_audio_bpm(delta, previous_pulse, previous_energy)
 	if _tunnel_material != null:
 		_tunnel_material.set_shader_parameter("device_audio_pulse", _device_audio_pulse)
@@ -1764,6 +1822,20 @@ func _build_device_audio_debug_label() -> void:
 	_device_audio_debug_label.add_theme_constant_override("shadow_offset_y", 2)
 	$HUD.add_child(_device_audio_debug_label)
 	_layout_device_audio_debug_label()
+
+func _build_web_audio_connect_button() -> void:
+	if not OS.has_feature("web"):
+		return
+	_web_audio_connect_button = Button.new()
+	_web_audio_connect_button.name = "WebAudioConnectButton"
+	_web_audio_connect_button.text = "CONNECT AUDIO"
+	_web_audio_connect_button.visible = false
+	_web_audio_connect_button.focus_mode = Control.FOCUS_NONE
+	_web_audio_connect_button.add_theme_font_size_override("font_size", 16)
+	_apply_tutorial_button_style(_web_audio_connect_button)
+	_web_audio_connect_button.pressed.connect(_start_web_system_audio_capture)
+	$HUD.add_child(_web_audio_connect_button)
+	_layout_web_audio_connect_button()
 
 func _apply_control_rect(control: Control, rect: Rect2) -> void:
 	control.anchor_left = 0.0
@@ -1981,6 +2053,13 @@ func _update_hud() -> void:
 	combo_label.text = hud_pulse_text(_chain_combo)
 	if _device_audio_debug_label != null:
 		_device_audio_debug_label.text = device_audio_debug_text(_device_audio_available, _device_audio_energy, _device_audio_pulse, _device_audio_source_label, _audio_bpm, _audio_bpm_confidence, _tunnel_texture_speed)
+	if _web_audio_connect_button != null:
+		var web_status := ""
+		if _device_audio_analyzer != null and _analyzer_has_method(_device_audio_analyzer, "get_status"):
+			web_status = str(_device_audio_analyzer.call("get_status"))
+		_web_audio_connect_button.visible = OS.has_feature("web") and not (_device_audio_source_label == DEVICE_AUDIO_SOURCE_WEB and _device_audio_available)
+		_web_audio_connect_button.disabled = web_status == "starting"
+		_web_audio_connect_button.text = "CONNECTING..." if web_status == "starting" else "CONNECT AUDIO"
 
 func _powerup_status_text() -> String:
 	var parts: Array[String] = []

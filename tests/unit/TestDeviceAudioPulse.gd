@@ -66,6 +66,10 @@ func test_game_audio_debug_text_reports_fallback_source() -> void:
 	var text: String = GameController.device_audio_debug_text(true, 0.2, 0.4, GameController.DEVICE_AUDIO_SOURCE_GAME)
 	assert_equal(text, "GAME AUDIO ON  E 0.2000  P 0.40", "Debug readout should identify the mobile game-audio fallback")
 
+func test_web_audio_debug_text_reports_capture_source() -> void:
+	var text: String = GameController.device_audio_debug_text(false, 0.0, 0.0, GameController.DEVICE_AUDIO_SOURCE_WEB, 120.0, 0.0, 0.62)
+	assert_equal(text, "WEB AUDIO OFF  E 0.0000  P 0.00  BPM --  C 0.00  S 0.62", "Debug readout should identify web system audio capture state")
+
 func test_game_audio_magnitude_maps_to_bounded_energy() -> void:
 	var energy: float = GameController.game_audio_energy_from_magnitude(Vector2(0.5, 0.5))
 	assert_true(energy > 0.0, "Game audio magnitude should produce fallback energy")
