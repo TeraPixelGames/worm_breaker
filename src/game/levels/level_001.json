@@ -7,6 +7,13 @@
 	"start_speed_z": 8.0,
 	"brick_theta_size": 0.48,
 	"brick_z_size": 0.95,
+	"tunnel_bend": {
+		"enabled": true,
+		"amplitude": 1.0,
+		"frequency": 1.0,
+		"speed": 0.18,
+		"phase": 0.0
+	},
 	"bricks": [
 		{"theta_center": -1.65, "z_center": 13.0, "hp": 1},
 		{"theta_center": -0.95, "z_center": 13.0, "hp": 1},
