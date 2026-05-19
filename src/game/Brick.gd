@@ -1,6 +1,7 @@
 extends Node3D
 
 const TunnelMath = preload("res://src/game/TunnelMath.gd")
+const CRYSTAL_BLOCK_SHADER: Shader = preload("res://src/shaders/crystal_block.gdshader")
 
 @onready var body: MeshInstance3D = $Body
 
@@ -11,16 +12,13 @@ var z_center: float = 0.0
 var theta_size: float = 0.42
 var z_size: float = 1.0
 
-var _material: StandardMaterial3D
+var _material: ShaderMaterial
 var _flash_timer: float = 0.0
 var _phase: float = 0.0
 
 func _ready() -> void:
-	_material = StandardMaterial3D.new()
-	_material.roughness = 0.24
-	_material.metallic = 0.18
-	_material.cull_mode = BaseMaterial3D.CULL_DISABLED
-	_material.emission_enabled = true
+	_material = ShaderMaterial.new()
+	_material.shader = CRYSTAL_BLOCK_SHADER
 	body.material_override = _material
 	_refresh_color()
 
@@ -54,13 +52,8 @@ func get_collision_data(ball_theta_radius: float, ball_z_radius: float) -> Dicti
 
 func _process(delta: float) -> void:
 	_phase = fmod(_phase + delta * 0.08, 1.0)
-	if _flash_timer <= 0.0:
-		_refresh_color()
-		return
 	_flash_timer = max(_flash_timer - delta, 0.0)
-	var flash_alpha: float = _flash_timer / 0.12
-	_material.emission_enabled = flash_alpha > 0.0
-	_material.emission = Color(1.0, 1.0, 1.0) * (0.9 * flash_alpha)
+	_refresh_color()
 
 func _place_on_surface(surface_radius: float) -> void:
 	position = TunnelMath.surface_to_world(theta_center, z_center, surface_radius)
@@ -78,13 +71,15 @@ func _place_on_surface(surface_radius: float) -> void:
 		)
 
 func _refresh_color() -> void:
-	_material.emission_enabled = true
 	var hue := fmod(_phase + (0.56 if hp >= 2 else 0.88), 1.0)
+	var flash_alpha: float = clampf(_flash_timer / 0.12, 0.0, 1.0)
 	if hp >= 2:
-		_material.albedo_color = Color.from_hsv(hue, 0.78, 0.92)
-		_material.emission = Color.from_hsv(hue, 0.95, 0.55)
-		_material.emission_energy_multiplier = 0.8
+		_material.set_shader_parameter("crystal_color", Color.from_hsv(hue, 0.58, 0.96))
+		_material.set_shader_parameter("core_color", Color.from_hsv(fmod(hue + 0.16, 1.0), 0.82, 1.0))
 	else:
-		_material.albedo_color = Color.from_hsv(hue, 0.88, 1.0)
-		_material.emission = Color.from_hsv(hue, 1.0, 0.68)
-		_material.emission_energy_multiplier = 0.72
+		_material.set_shader_parameter("crystal_color", Color.from_hsv(hue, 0.64, 1.0))
+		_material.set_shader_parameter("core_color", Color.from_hsv(fmod(hue + 0.12, 1.0), 0.92, 1.0))
+	_material.set_shader_parameter("flash_color", Color(1.0, 1.0, 1.0, 1.0))
+	_material.set_shader_parameter("flash_strength", flash_alpha)
+	_material.set_shader_parameter("time_phase", _phase * 100.0)
+	_material.set_shader_parameter("hp_ratio", float(hp) / maxf(float(max_hp), 1.0))

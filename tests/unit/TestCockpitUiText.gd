@@ -29,3 +29,8 @@ func test_powerup_tutorial_display_names_are_player_facing() -> void:
 func test_signal_gate_hit_strength_is_clamped() -> void:
 	assert_equal(GameController.signal_gate_hit_strength(0.0), 0.0, "Expired gate hit should not emit a pulse")
 	assert_equal(GameController.signal_gate_hit_strength(999.0), 1.0, "Fresh gate hit should clamp at full pulse strength")
+
+func test_bricks_use_crystal_shader() -> void:
+	assert_true(ResourceLoader.exists("res://src/shaders/crystal_block.gdshader"), "Crystal block shader should exist")
+	var shader := load("res://src/shaders/crystal_block.gdshader") as Shader
+	assert_true(shader != null, "Crystal block shader should load")
