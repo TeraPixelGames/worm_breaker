@@ -531,7 +531,7 @@ func _refresh_tunnel_visual() -> void:
 	tunnel_material.set_shader_parameter("audio_bass", _device_audio_bass)
 	tunnel_material.set_shader_parameter("audio_mid", _device_audio_mid)
 	tunnel_material.set_shader_parameter("audio_treble", _device_audio_treble)
-	tunnel_material.set_shader_parameter("projectm_overlay_strength", 0.86)
+	tunnel_material.set_shader_parameter("projectm_overlay_strength", 0.48)
 	tunnel_material.set_shader_parameter("base_color", Color(0.018, 0.0, 0.055, 1.0))
 	tunnel_material.set_shader_parameter("near_color", Color(0.0, 0.9, 0.95, 1.0))
 	tunnel_material.set_shader_parameter("far_color", Color(1.0, 0.1, 0.95, 1.0))
@@ -1175,7 +1175,7 @@ func _update_psychedelic_materials() -> void:
 		var pulse := 0.5 + 0.5 * sin(_visual_time * 0.9)
 		var audio_intensity := _device_audio_pulse * 0.58 + _device_audio_bass * 0.42
 		_tunnel_material.set_shader_parameter("hue_shift", hue)
-		_tunnel_material.set_shader_parameter("intensity", 0.78 + pulse * 0.26 + audio_intensity)
+		_tunnel_material.set_shader_parameter("intensity", 0.58 + pulse * 0.18 + audio_intensity * 0.62)
 		_tunnel_material.set_shader_parameter("near_color", Color.from_hsv(fmod(hue + 0.48, 1.0), 0.74, 1.0))
 		_tunnel_material.set_shader_parameter("far_color", Color.from_hsv(fmod(hue + 0.12, 1.0), 0.92, 1.0))
 	if _ball_material != null:

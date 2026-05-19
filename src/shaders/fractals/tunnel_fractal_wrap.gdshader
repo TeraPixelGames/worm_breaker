@@ -12,7 +12,7 @@ uniform float device_audio_pulse : hint_range(0.0, 1.0) = 0.0;
 uniform float audio_bass : hint_range(0.0, 1.0) = 0.0;
 uniform float audio_mid : hint_range(0.0, 1.0) = 0.0;
 uniform float audio_treble : hint_range(0.0, 1.0) = 0.0;
-uniform float projectm_overlay_strength : hint_range(0.0, 1.0) = 0.82;
+uniform float projectm_overlay_strength : hint_range(0.0, 1.0) = 0.48;
 uniform vec4 base_color : source_color = vec4(0.018, 0.0, 0.055, 1.0);
 uniform vec4 near_color : source_color = vec4(0.02, 0.9, 0.95, 1.0);
 uniform vec4 far_color : source_color = vec4(1.0, 0.1, 0.95, 1.0);
@@ -75,15 +75,15 @@ void fragment() {
 	float mid_landmarks = smoothstep(0.94 - audio_mid * 0.12, 1.0, abs(sin(theta * 6.28318 * 5.0 + depth * 0.6))) * audio_mid;
 	float treble_sparks = smoothstep(0.72, 1.0, noise(wrapped * 7.4 + vec2(audio_treble * 11.0, tunnel_phase * 1.8))) * audio_treble;
 	float flow = smoothstep(0.38, 0.9, fractal);
-	float trace = max(max(depth_rings * (0.56 + audio_bass * 0.32), angular_lines * (0.34 + audio_treble * 0.28)), max(beat_rings * 0.92, mid_landmarks * 0.42));
-	float brightness = clamp((flow * 0.52 + trace) * intensity, 0.0, 1.35);
+	float trace = max(max(depth_rings * (0.38 + audio_bass * 0.22), angular_lines * (0.24 + audio_treble * 0.2)), max(beat_rings * 0.58, mid_landmarks * 0.34));
+	float brightness = clamp((flow * 0.42 + trace) * intensity, 0.0, 1.0);
 
 	vec3 color = palette(brightness + fractal * 0.14);
-	color += near_color.rgb * depth_rings * 0.18 * intensity;
-	color += far_color.rgb * angular_lines * (0.10 + audio_treble * 0.18) * intensity;
-	color += near_color.rgb * mid_landmarks * 0.24 * intensity;
-	color += mix(near_color.rgb, far_color.rgb, 0.35) * beat_rings * 0.74 * intensity;
-	color += far_color.rgb * treble_sparks * 0.26 * intensity;
+	color += near_color.rgb * depth_rings * 0.1 * intensity;
+	color += far_color.rgb * angular_lines * (0.07 + audio_treble * 0.12) * intensity;
+	color += near_color.rgb * mid_landmarks * 0.16 * intensity;
+	color += mix(near_color.rgb, far_color.rgb, 0.35) * beat_rings * 0.38 * intensity;
+	color += far_color.rgb * treble_sparks * 0.18 * intensity;
 
 	float audio_drive = clamp(device_audio_pulse * 0.55 + audio_bass * 0.38 + audio_mid * 0.22 + audio_treble * 0.18, 0.0, 1.0);
 	float kaleido_theta = abs(fract(theta * 12.0 + sin(depth * 0.065 + tunnel_phase * 0.16) * 0.22) - 0.5) * 2.0;
@@ -99,7 +99,7 @@ void fragment() {
 	float chroma_scan = neon_band(warped_depth * 5.2 + theta * 3.0 + audio_treble * 1.8, 0.028 + audio_treble * 0.024) * (0.35 + audio_treble * 0.95);
 	float center_glow = smoothstep(0.56, 0.0, abs(mirrored_theta - 0.5)) * smoothstep(0.35, 1.0, neon_rings + audio_drive);
 	float projectm_mask = clamp(neon_rings * 0.46 + radial_spokes * 0.5 + secondary_spokes * 0.32 + circuit_blocks * 0.72 + chroma_scan * 0.38 + center_glow * 0.24, 0.0, 1.65);
-	float overlay_mix = projectm_overlay_strength * (0.62 + audio_drive * 0.62);
+	float overlay_mix = projectm_overlay_strength * (0.42 + audio_drive * 0.48);
 	vec3 projectm_color = vec3(0.0);
 	projectm_color += near_color.rgb * neon_rings * (0.55 + audio_bass * 0.75);
 	projectm_color += far_color.rgb * radial_spokes * (0.48 + audio_treble * 0.9);
@@ -109,6 +109,6 @@ void fragment() {
 	projectm_color += vec3(1.0, 0.95, 0.28) * beat_rings * audio_drive * 0.52;
 	color += projectm_color * overlay_mix;
 
-	ALBEDO = mix(base_color.rgb, color, 0.72);
-	EMISSION = color * (0.45 + brightness * 1.35 + projectm_mask * overlay_mix * 1.65 + device_audio_pulse * 0.72 + audio_bass * 0.48 + audio_mid * 0.24 + audio_treble * 0.36);
+	ALBEDO = mix(base_color.rgb, color, 0.54);
+	EMISSION = color * (0.28 + brightness * 0.88 + projectm_mask * overlay_mix * 0.82 + device_audio_pulse * 0.38 + audio_bass * 0.28 + audio_mid * 0.16 + audio_treble * 0.22);
 }
