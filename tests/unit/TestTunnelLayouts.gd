@@ -51,6 +51,12 @@ func test_tunnel_light_portal_shader_loads() -> void:
 	var shader := load("res://src/shaders/tunnel_light_portal.gdshader") as Shader
 	assert_true(shader != null, "Tunnel light portal shader should load")
 
+func test_tunnel_light_portal_shader_has_layered_depth() -> void:
+	var shader_source := FileAccess.get_file_as_string("res://src/shaders/tunnel_light_portal.gdshader")
+	assert_true(shader_source.contains("portal_depth_volume"), "Tunnel end light shader should include layered portal depth")
+	assert_true(shader_source.contains("depth_layers"), "Tunnel end light shader should expose depth layer count")
+	assert_true(shader_source.contains("volumetric_glow"), "Tunnel end light shader should expose volumetric glow control")
+
 func test_tunnel_background_textures_load() -> void:
 	var paths: Array[String] = [
 		"res://assets/tunnel_backgrounds/neon_circuit_octagon.png",
@@ -81,3 +87,9 @@ func test_original_portal_shader_loads_for_first_stage() -> void:
 	assert_true(ResourceLoader.exists("res://src/shaders/fractals/mandelbrot_portal.gdshader"), "Original tunnel end shader should exist")
 	var shader := load("res://src/shaders/fractals/mandelbrot_portal.gdshader") as Shader
 	assert_true(shader != null, "Original tunnel end shader should load")
+
+func test_original_portal_shader_has_depth_layers() -> void:
+	var shader_source := FileAccess.get_file_as_string("res://src/shaders/fractals/mandelbrot_portal.gdshader")
+	assert_true(shader_source.contains("layer_index"), "Original portal shader should layer samples for depth")
+	assert_true(shader_source.contains("parallax"), "Original portal shader should use parallax depth offsets")
+	assert_true(shader_source.contains("volumetric_glow"), "Original portal shader should include volumetric glow")

@@ -21,6 +21,9 @@ uniform float device_audio_pulse : hint_range(0.0, 1.0) = 0.0;
 uniform float audio_bass : hint_range(0.0, 1.0) = 0.0;
 uniform float audio_mid : hint_range(0.0, 1.0) = 0.0;
 uniform float audio_treble : hint_range(0.0, 1.0) = 0.0;
+uniform float depth_layers : hint_range(2.0, 9.0) = 6.0;
+uniform float depth_strength : hint_range(0.0, 2.0) = 1.0;
+uniform float volumetric_glow : hint_range(0.0, 2.0) = 0.8;
 
 float hash21(vec2 p) {
 	p = fract(p * vec2(123.34, 456.21));
@@ -77,6 +80,40 @@ vec3 variant_color(float amount, float radial, float angle, vec2 uv, float time)
 	return color;
 }
 
+vec3 portal_depth_volume(vec2 uv, float time, float audio_drive) {
+	vec3 volume = vec3(0.0);
+	float total_weight = 0.0;
+	int layer_count = int(clamp(depth_layers, 2.0, 9.0));
+	for (int i = 0; i < 9; i++) {
+		if (i >= layer_count) {
+			break;
+		}
+		float layer = float(i) / max(float(layer_count - 1), 1.0);
+		float perspective = 1.0 + layer * (1.15 + depth_strength * 0.42);
+		float travel = time * (0.12 + layer * 0.18 + audio_mid * 0.035);
+		vec2 layer_uv = uv * perspective;
+		layer_uv += vec2(
+			sin(time * 0.17 + layer * 3.8),
+			cos(time * 0.13 + layer * 4.4)
+		) * layer * (0.13 + audio_drive * 0.05) * drift;
+		float layer_radial = length(layer_uv);
+		float layer_angle = atan(layer_uv.y, layer_uv.x);
+		float tunnel_slice = line_band(layer_radial * (ring_density * (0.72 + layer * 0.56)) - travel, 0.032 + layer * 0.012);
+		float ray_slice = spoke_line(layer_angle + sin(layer_radial * 3.0 - time * 0.22) * 0.16, ray_density * (0.72 + layer * 0.38), 0.018 + layer * 0.004);
+		float cell_slice = hex_grid(layer_uv * (2.2 + layer * 3.8) + time * 0.035) * grid_strength;
+		float depth_fade = exp(-layer * 1.45) * smoothstep(1.24, 0.08, layer_radial);
+		float layer_light = max(tunnel_slice * 0.68, ray_slice * 0.46);
+		layer_light = max(layer_light, cell_slice * 0.35);
+		vec3 layer_color = mix(primary_color.rgb, secondary_color.rgb, layer * 0.72);
+		layer_color = mix(layer_color, accent_color.rgb, tunnel_slice * (0.18 + audio_bass * 0.16));
+		volume += layer_color * layer_light * depth_fade;
+		total_weight += depth_fade;
+	}
+	float center_well = pow(max(0.0, 1.0 - length(uv)), 3.0) * (0.55 + audio_drive * 0.35);
+	vec3 core_color = mix(primary_color.rgb, accent_color.rgb, 0.42 + audio_treble * 0.18);
+	return volume * depth_strength / max(total_weight * 0.42, 0.34) + core_color * center_well * volumetric_glow;
+}
+
 void fragment() {
 	vec2 uv = (UV - 0.5) * 2.0;
 	float radial = length(uv);
@@ -94,9 +131,10 @@ void fragment() {
 	color += primary_color.rgb * audio_bass * line_band(radial * (ring_density + 2.0) - time * 0.34, 0.045) * 0.34;
 	color += secondary_color.rgb * audio_mid * spoke_line(angle + time * 0.12, ray_density + 3.0, 0.028) * 0.28;
 	color += accent_color.rgb * audio_treble * hex_grid(warped * 7.0 + time * 0.12) * 0.22;
+	color += portal_depth_volume(warped, time, audio_drive) * (0.62 + audio_drive * 0.38);
 	color *= mask * (0.82 + vignette * 0.44 + audio_drive * 0.18);
 
 	ALBEDO = color;
-	EMISSION = color * (1.55 + pulse * 0.35 + audio_drive * 0.72);
-	ALPHA = alpha * mask * (1.0 + audio_drive * 0.12);
+	EMISSION = color * (1.65 + pulse * 0.4 + audio_drive * 0.82 + volumetric_glow * 0.18);
+	ALPHA = alpha * mask * (0.92 + audio_drive * 0.14 + depth_strength * 0.08);
 }

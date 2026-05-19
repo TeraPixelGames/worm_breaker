@@ -16,6 +16,8 @@ uniform float device_audio_pulse : hint_range(0.0, 1.0) = 0.0;
 uniform float audio_bass : hint_range(0.0, 1.0) = 0.0;
 uniform float audio_mid : hint_range(0.0, 1.0) = 0.0;
 uniform float audio_treble : hint_range(0.0, 1.0) = 0.0;
+uniform float depth_strength : hint_range(0.0, 2.0) = 1.0;
+uniform float volumetric_glow : hint_range(0.0, 2.0) = 0.75;
 
 int mandelbrot(vec2 c, int limit) {
 	vec2 z = vec2(0.0);
@@ -33,6 +35,20 @@ int mandelbrot(vec2 c, int limit) {
 	return count;
 }
 
+vec3 mandelbrot_palette(float f, vec2 color_uv, float audio_drive) {
+	float decay = max(0.0, 50.0 - (1.0 + audio_drive * 8.0));
+	float ff = pow(f, 1.0 - (f * decay));
+	float band = smoothstep(0.0, 1.0, ff);
+	vec3 col = vec3(0.0);
+	col.r = band * (color_uv.x * 0.5 + 0.5);
+	col.b = band * (color_uv.y * 0.5 + 0.5);
+	col.g = band * (-color_uv.x * 0.5 + 0.5);
+	col += vec3(0.18, 0.38, 1.0) * audio_bass * band * 0.24;
+	col += vec3(1.0, 0.24, 0.85) * audio_mid * band * 0.18;
+	col += vec3(1.0, 0.95, 0.28) * audio_treble * band * 0.14;
+	return col;
+}
+
 void fragment() {
 	vec2 uv = (UV - 0.5) * 2.0;
 	vec2 color_uv = uv;
@@ -45,27 +61,32 @@ void fragment() {
 		sin(portal_phase * (0.71 + audio_mid * 0.16)) + 0.42 * sin(portal_phase * 1.37 + 1.8),
 		cos(portal_phase * (0.63 + audio_treble * 0.18)) + 0.36 * sin(portal_phase * 1.11 + 0.4)
 	) * 0.0018 * drift * (0.24 + zoom_progress + audio_drive * 0.36);
-	vec2 c = (uv / animated_zoom) + focus + focus_drift;
-
-	int count = mandelbrot(c, recursion_limit);
-	float f = float(count) / float(recursion_limit);
-	vec3 col = vec3(1.0);
-
-	if (count >= recursion_limit - 1) {
-		col = vec3(0.0);
-	} else {
-		float decay = max(0.0, 50.0 - local_time);
-		float ff = pow(f, 1.0 - (f * decay));
-		float band = smoothstep(0.0, 1.0, ff);
-		col.r = band * (color_uv.x * 0.5 + 0.5);
-		col.b = band * (color_uv.y * 0.5 + 0.5);
-		col.g = band * (-color_uv.x * 0.5 + 0.5);
-		col += vec3(0.18, 0.38, 1.0) * audio_bass * band * 0.24;
-		col += vec3(1.0, 0.24, 0.85) * audio_mid * band * 0.18;
-		col += vec3(1.0, 0.95, 0.28) * audio_treble * band * 0.14;
+	vec3 col = vec3(0.0);
+	float accumulated_alpha = 0.0;
+	for (int layer_index = 0; layer_index < 5; layer_index++) {
+		float layer = float(layer_index) / 4.0;
+		float parallax = 1.0 + layer * (1.2 + depth_strength * 0.5);
+		float layer_zoom = animated_zoom * (1.0 + layer * (0.38 + zoom_progress * 0.28));
+		vec2 layer_uv = uv * parallax;
+		layer_uv += vec2(
+			sin(portal_phase * 0.19 + layer * 4.1),
+			cos(portal_phase * 0.16 + layer * 5.0)
+		) * layer * 0.08 * drift;
+		vec2 c = (layer_uv / layer_zoom) + focus + focus_drift * (1.0 + layer * 1.8);
+		int count = mandelbrot(c, recursion_limit);
+		if (count < recursion_limit - 1) {
+			float f = float(count) / float(recursion_limit);
+			float layer_fade = exp(-layer * 1.2) * smoothstep(1.18, 0.12, length(layer_uv));
+			vec3 layer_color = mandelbrot_palette(f, color_uv + layer_uv * 0.12, audio_drive);
+			col += layer_color * layer_fade * (0.52 + layer * 0.38);
+			accumulated_alpha += layer_fade * smoothstep(0.08, 0.86, f);
+		}
 	}
+	float core_well = pow(max(0.0, 1.0 - length(uv)), 4.0) * (1.0 + audio_drive * 0.5);
+	col += vec3(0.35, 0.82, 1.0) * core_well * volumetric_glow;
+	col += vec3(1.0, 0.34, 0.92) * radial_mask * audio_mid * 0.16;
 
 	ALBEDO = col * radial_mask;
-	EMISSION = col * radial_mask * (1.75 + audio_drive * 0.86);
-	ALPHA = alpha * radial_mask * (1.0 + audio_drive * 0.18);
+	EMISSION = col * radial_mask * (1.85 + audio_drive * 0.95 + volumetric_glow * 0.22);
+	ALPHA = alpha * radial_mask * clamp(0.5 + accumulated_alpha * 0.22 + audio_drive * 0.18 + depth_strength * 0.08, 0.0, 1.25);
 }
