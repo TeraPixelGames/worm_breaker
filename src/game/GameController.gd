@@ -1207,6 +1207,8 @@ func _step_powerups(delta: float) -> void:
 	if _powerups.is_empty():
 		return
 	for i in range(_powerups.size() - 1, -1, -1):
+		if i >= _powerups.size():
+			continue
 		var powerup := _powerups[i]
 		var node: MeshInstance3D = powerup["node"]
 		if node == null or not is_instance_valid(node):
@@ -1224,9 +1226,11 @@ func _step_powerups(delta: float) -> void:
 		if z <= _paddle_z + POWERUP_COLLECT_Z_WINDOW:
 			var theta_delta := absf(TunnelMath.theta_distance(theta, _paddle_theta))
 			if theta_delta <= _paddle_collision_width() * 0.55:
-				_collect_powerup(String(powerup["type"]), node.position)
+				var power_type := String(powerup["type"])
+				var origin := node.position
 				node.queue_free()
 				_powerups.remove_at(i)
+				_collect_powerup(power_type, origin)
 			elif z < _z_fail:
 				node.queue_free()
 				_powerups.remove_at(i)
