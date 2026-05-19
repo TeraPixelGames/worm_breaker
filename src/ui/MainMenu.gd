@@ -12,11 +12,12 @@ const JULIA_SHADER: Shader = preload("res://src/shaders/fractals/julia_set.gdsha
 @onready var signal_label: Label = $Center/Panel/VBox/SignalLabel
 @onready var start_button: Button = $Center/Panel/VBox/StartButton
 @onready var overdrive_button: Button = $Center/Panel/VBox/OverdriveButton
+@onready var signal_sync_button: Button = $Center/Panel/VBox/SignalSyncButton
 @onready var tutorial_button: Button = $Center/Panel/VBox/TutorialButton
 @onready var quit_button: Button = $Center/Panel/VBox/QuitButton
 
 const PANEL_MAX_WIDTH: float = 640.0
-const PANEL_MAX_HEIGHT: float = 500.0
+const PANEL_MAX_HEIGHT: float = 540.0
 const PANEL_SAFE_MARGIN: float = 56.0
 const PANEL_INSET: float = 8.0
 
@@ -67,6 +68,10 @@ func _on_start_button_pressed() -> void:
 func _on_overdrive_button_pressed() -> void:
 	RunManager.set_run_style("overdrive")
 	RunManager.start_new_run("overdrive")
+
+func _on_signal_sync_button_pressed() -> void:
+	RunManager.set_run_style("signal_sync")
+	RunManager.start_new_run("signal_sync")
 
 func _on_tutorial_button_pressed() -> void:
 	SaveStore.set_tutorial_prompts_disabled(false)
@@ -154,7 +159,7 @@ func _apply_launch_deck_style() -> void:
 	subtitle_label.add_theme_font_size_override("font_size", 24)
 	subtitle_label.add_theme_color_override("font_color", Color(0.68, 1.0, 0.98, 0.92))
 	subtitle_label.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
-	signal_label.text = "ROTATE  /  CATCH  /  BREACH"
+	signal_label.text = "ROTATE  /  CATCH  /  SYNC"
 	signal_label.add_theme_font_size_override("font_size", 17)
 	signal_label.add_theme_color_override("font_color", Color(1.0, 0.2, 0.92, 0.92))
 	signal_label.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
@@ -164,12 +169,14 @@ func _apply_launch_deck_style() -> void:
 
 	_style_button(start_button, Color(0.02, 1.0, 0.82, 0.95), Color(0.02, 0.08, 0.12, 1.0))
 	_style_secondary_button(overdrive_button, Color(0.08, 0.0, 0.16, 0.84), Color(1.0, 0.82, 0.98, 0.96), Color(1.0, 0.05, 0.75, 0.58))
+	_style_secondary_button(signal_sync_button, Color(0.0, 0.1, 0.16, 0.86), Color(0.68, 1.0, 0.96, 0.98), Color(0.0, 1.0, 0.9, 0.62))
 	_style_secondary_button(tutorial_button, Color(0.08, 0.05, 0.0, 0.84), Color(1.0, 0.94, 0.58, 0.96), Color(1.0, 0.84, 0.1, 0.58))
 	_style_secondary_button(quit_button, Color(0.025, 0.02, 0.06, 0.78), Color(0.86, 0.9, 1.0, 0.88), Color(0.52, 0.62, 0.78, 0.36))
 	if _web_audio_button != null:
 		_style_secondary_button(_web_audio_button, Color(0.0, 0.1, 0.12, 0.86), Color(0.64, 1.0, 0.92, 0.96), Color(0.0, 1.0, 0.8, 0.54))
 	start_button.text = "PRESS TO LAUNCH"
 	overdrive_button.text = "OVERDRIVE"
+	signal_sync_button.text = "SIGNAL SYNC"
 	tutorial_button.text = "TUTORIAL"
 	quit_button.text = "EXIT"
 	_update_web_audio_button()

@@ -24,7 +24,7 @@ func _ready() -> void:
 	_layout_result_chamber()
 	var is_win: bool = RunManager.last_result_win
 	title_label.text = results_title_text(is_win)
-	var style_text := "Overdrive" if str(RunManager.run_style).to_lower() == "overdrive" else "Stability"
+	var style_text := run_style_result_text(str(RunManager.run_style))
 	summary_label.text = "SIGNAL CHARGE %d  /  BEST %d  /  %s\nDEPTH L%d" % [
 		RunManager.run_score,
 		SaveStore.high_score,
@@ -211,3 +211,12 @@ func _apply_control_rect(control: Control, rect: Rect2) -> void:
 
 static func results_title_text(is_win: bool) -> String:
 	return "SPIRAL CLEAR" if is_win else "SIGNAL LOST"
+
+static func run_style_result_text(style: String) -> String:
+	match style.strip_edges().to_lower():
+		"overdrive":
+			return "Overdrive"
+		"signal_sync":
+			return "Signal Sync"
+		_:
+			return "Stability"

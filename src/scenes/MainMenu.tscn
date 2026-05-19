@@ -136,6 +136,15 @@ theme_override_styles/hover = SubResource("1_primary")
 theme_override_styles/pressed = SubResource("1_primary")
 text = "Start Overdrive Run"
 
+[node name="SignalSyncButton" type="Button" parent="Center/Panel/VBox"]
+layout_mode = 2
+custom_minimum_size = Vector2(260, 52)
+theme_override_colors/font_color = Color(0.96, 0.98, 1, 1)
+theme_override_styles/normal = SubResource("2_secondary")
+theme_override_styles/hover = SubResource("1_primary")
+theme_override_styles/pressed = SubResource("1_primary")
+text = "Start Signal Sync Run"
+
 [node name="TutorialButton" type="Button" parent="Center/Panel/VBox"]
 layout_mode = 2
 custom_minimum_size = Vector2(260, 52)
@@ -156,5 +165,6 @@ text = "Quit"
 
 [connection signal="pressed" from="Center/Panel/VBox/StartButton" to="." method="_on_start_button_pressed"]
 [connection signal="pressed" from="Center/Panel/VBox/OverdriveButton" to="." method="_on_overdrive_button_pressed"]
+[connection signal="pressed" from="Center/Panel/VBox/SignalSyncButton" to="." method="_on_signal_sync_button_pressed"]
 [connection signal="pressed" from="Center/Panel/VBox/TutorialButton" to="." method="_on_tutorial_button_pressed"]
 [connection signal="pressed" from="Center/Panel/VBox/QuitButton" to="." method="_on_quit_button_pressed"]

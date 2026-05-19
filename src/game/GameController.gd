@@ -155,9 +155,18 @@ const MIC_AUDIO_PULSE_BOOST: float = 1.8
 const ANDROID_SYSTEM_AUDIO_FALLBACK_DELAY: float = 2.5
 const STYLE_STABILITY := "stability"
 const STYLE_OVERDRIVE := "overdrive"
+const STYLE_SIGNAL_SYNC := "signal_sync"
 const POWERUP_WIDE := "WIDE"
 const POWERUP_SLOW := "SLOW"
 const POWERUP_BLAST := "BLAST"
+const SIGNAL_SYNC_GATE_MAX: int = 8
+const SIGNAL_SYNC_GATE_WINDOW_Z: float = 0.52
+const SIGNAL_SYNC_GATE_THETA_WINDOW: float = 0.54
+const SIGNAL_SYNC_GATE_LOOKAHEAD: float = 7.8
+const SIGNAL_SYNC_GATE_COOLDOWN: float = 0.18
+const SIGNAL_SYNC_GATE_POINTS: int = 140
+const SIGNAL_SYNC_GATE_MISS_PENALTY: int = 1
+const SIGNAL_SYNC_LANE_COUNT: int = 6
 
 @onready var tunnel: MeshInstance3D = $World/Tunnel
 @onready var paddle_root: Node3D = $World/PaddleRoot
@@ -252,6 +261,12 @@ var _impact_particle_root: Node3D
 var _impact_particles: Array[Dictionary] = []
 var _powerup_root: Node3D
 var _powerups: Array[Dictionary] = []
+var _signal_sync_root: Node3D
+var _signal_sync_gates: Array[Dictionary] = []
+var _signal_sync_spawn_cooldown: float = 0.0
+var _signal_sync_metronome_time: float = 0.0
+var _signal_sync_next_lane: int = 0
+var _signal_sync_audio_onset: bool = false
 var _wide_timer: float = 0.0
 var _slow_timer: float = 0.0
 var _portal_cap: MeshInstance3D
@@ -297,6 +312,7 @@ func _ready() -> void:
 	_build_ball_tracers()
 	_build_impact_particles()
 	_build_powerup_root()
+	_build_signal_sync_root()
 	_build_tutorial_overlay()
 	_build_tunnel_end_portal()
 	_build_device_audio_debug_label()
@@ -323,6 +339,7 @@ func _physics_process(delta: float) -> void:
 	_signal_gate_hit_timer = maxf(_signal_gate_hit_timer - delta, 0.0)
 	_step_portal_motion(delta)
 	_step_device_audio_pulse(delta)
+	_step_signal_sync_spawner(delta)
 	_step_tunnel_texture_motion(delta)
 	_step_tunnel_layout_transition(delta)
 	_update_psychedelic_materials()
@@ -349,6 +366,7 @@ func _physics_process(delta: float) -> void:
 	_paddle_flash_timer = maxf(_paddle_flash_timer - delta, 0.0)
 	_step_paddle(delta)
 	_step_ball(delta)
+	_step_signal_sync_gates(delta)
 	_update_ball_visual()
 	_update_paddle_visual()
 	_update_camera(delta)
@@ -415,6 +433,8 @@ func _step_ball(delta: float) -> void:
 		return
 
 	_check_brick_hits()
+	if _is_signal_sync_mode():
+		_check_signal_sync_gate_crossings(prev_z, _ball_z)
 
 func _check_brick_hits() -> void:
 	for i in range(_bricks.size() - 1, -1, -1):
@@ -471,6 +491,8 @@ func _register_combo_hit() -> void:
 	var style_mult := 1.0
 	if _run_style == STYLE_OVERDRIVE:
 		style_mult = 1.25
+	elif _run_style == STYLE_SIGNAL_SYNC:
+		style_mult = 1.08
 	elif _run_style == STYLE_STABILITY:
 		style_mult = 0.95
 	var points := int(round((100 + (_chain_combo - 1) * 30) * style_mult))
@@ -526,6 +548,10 @@ func _load_level(level_index: int) -> void:
 		_ball_v_theta *= 1.20
 		_ball_v_z *= 1.14
 		_paddle_width *= 0.92
+	elif _run_style == STYLE_SIGNAL_SYNC:
+		_ball_v_theta *= 1.02
+		_ball_v_z *= 1.02
+		_paddle_width *= 1.08
 	else:
 		_ball_v_theta *= 0.94
 		_ball_v_z *= 0.95
@@ -546,6 +572,7 @@ func _load_level(level_index: int) -> void:
 	_refresh_tunnel_visual()
 	_spawn_bricks()
 	_clear_powerups()
+	_clear_signal_sync_gates()
 	_update_ball_visual()
 	_reset_ball_tracers()
 	_update_paddle_visual()
@@ -558,7 +585,7 @@ func _load_level(level_index: int) -> void:
 			"input"
 		)
 	else:
-		_show_message("DEPTH %d - %s" % [_level_index, "OVERDRIVE" if _run_style == STYLE_OVERDRIVE else "STABILITY"], 1.0)
+		_show_message("DEPTH %d - %s" % [_level_index, run_style_display_text(_run_style)], 1.0)
 
 func _compute_level_end_z() -> float:
 	var farthest_brick_z: float = 12.0
@@ -855,6 +882,156 @@ func _build_powerup_root() -> void:
 	_powerup_root.name = "Powerups"
 	$World.add_child(_powerup_root)
 	_powerups.clear()
+
+func _build_signal_sync_root() -> void:
+	_signal_sync_root = Node3D.new()
+	_signal_sync_root.name = "SignalSyncGates"
+	$World.add_child(_signal_sync_root)
+	_signal_sync_gates.clear()
+
+func _is_signal_sync_mode() -> bool:
+	return _run_style == STYLE_SIGNAL_SYNC
+
+func _make_signal_sync_gate_node(band: String) -> MeshInstance3D:
+	var node := MeshInstance3D.new()
+	node.name = "SignalSyncGate%s" % band.capitalize()
+	var mesh := BoxMesh.new()
+	mesh.size = Vector3(maxf(SIGNAL_SYNC_GATE_THETA_WINDOW * _play_radius * 1.22, 0.4), 0.28, 0.12)
+	node.mesh = mesh
+	node.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
+	var material := StandardMaterial3D.new()
+	material.transparency = BaseMaterial3D.TRANSPARENCY_ALPHA
+	material.blend_mode = BaseMaterial3D.BLEND_MODE_ADD
+	material.no_depth_test = true
+	material.shading_mode = BaseMaterial3D.SHADING_MODE_UNSHADED
+	material.albedo_color = _signal_sync_band_color(band, 0.78)
+	material.emission_enabled = true
+	material.emission = _signal_sync_band_color(band)
+	material.emission_energy_multiplier = 2.1
+	node.material_override = material
+	return node
+
+func _signal_sync_band_color(band: String, alpha: float = 1.0) -> Color:
+	match band:
+		"bass":
+			return Color(0.0, 0.95, 1.0, alpha)
+		"treble":
+			return Color(1.0, 0.92, 0.18, alpha)
+		_:
+			return Color(1.0, 0.16, 0.86, alpha)
+
+func _spawn_signal_sync_gate() -> void:
+	if not _is_signal_sync_mode() or _signal_sync_root == null or _signal_sync_gates.size() >= SIGNAL_SYNC_GATE_MAX:
+		return
+	var band := signal_sync_band_from_levels(_device_audio_bass, _device_audio_mid, _device_audio_treble)
+	var lane := _signal_sync_next_lane
+	_signal_sync_next_lane = posmod(_signal_sync_next_lane + 1 + (2 if band == "treble" else 1), SIGNAL_SYNC_LANE_COUNT)
+	var theta := signal_sync_lane_theta(lane)
+	var z := clampf(_ball_z + SIGNAL_SYNC_GATE_LOOKAHEAD + _device_audio_pulse * 2.4, _paddle_z + 3.2, _level_end_z - 1.4)
+	var node := _make_signal_sync_gate_node(band)
+	_signal_sync_root.add_child(node)
+	_place_signal_sync_gate_node(node, theta, z, 1.0)
+	_signal_sync_gates.append({
+		"node": node,
+		"theta": theta,
+		"z": z,
+		"band": band,
+		"age": 0.0
+	})
+
+func _place_signal_sync_gate_node(node: MeshInstance3D, theta: float, z: float, pulse: float) -> void:
+	node.position = TunnelMath.surface_to_world(theta, z, _play_radius + 0.04)
+	var tangent: Vector3 = Vector3(-sin(theta), cos(theta), 0.0).normalized()
+	var forward: Vector3 = TUNNEL_FORWARD
+	var inward: Vector3 = -Vector3(cos(theta), sin(theta), 0.0).normalized()
+	node.basis = Basis(tangent, forward, inward).orthonormalized()
+	node.scale = Vector3.ONE * (0.92 + pulse * 0.14)
+
+func _step_signal_sync_spawner(delta: float) -> void:
+	if not _is_signal_sync_mode():
+		_signal_sync_audio_onset = false
+		return
+	_signal_sync_spawn_cooldown = maxf(_signal_sync_spawn_cooldown - delta, 0.0)
+	_signal_sync_metronome_time = maxf(_signal_sync_metronome_time - delta, 0.0)
+	var fallback_spawn := false
+	if not _signal_sync_audio_onset and _signal_sync_metronome_time <= 0.0:
+		var bpm := clampf(_audio_bpm, AUDIO_BPM_MIN, AUDIO_BPM_MAX)
+		_signal_sync_metronome_time = 60.0 / bpm
+		fallback_spawn = _audio_bpm_confidence <= 0.18
+	if (_signal_sync_audio_onset or fallback_spawn) and _signal_sync_spawn_cooldown <= 0.0:
+		_spawn_signal_sync_gate()
+		_signal_sync_spawn_cooldown = SIGNAL_SYNC_GATE_COOLDOWN
+	_signal_sync_audio_onset = false
+
+func _step_signal_sync_gates(delta: float) -> void:
+	if _signal_sync_gates.is_empty():
+		return
+	for i in range(_signal_sync_gates.size() - 1, -1, -1):
+		var gate := _signal_sync_gates[i]
+		var node: MeshInstance3D = gate.get("node")
+		if node == null or not is_instance_valid(node):
+			_signal_sync_gates.remove_at(i)
+			continue
+		var age := float(gate.get("age", 0.0)) + delta
+		gate["age"] = age
+		var pulse := 0.5 + 0.5 * sin(_visual_time * 8.0 + age * 3.0)
+		_place_signal_sync_gate_node(node, float(gate.get("theta", 0.0)), float(gate.get("z", 0.0)), pulse)
+		if float(gate.get("z", 0.0)) < _z_fail:
+			_register_signal_sync_gate_miss(node.global_position, i)
+
+func _check_signal_sync_gate_crossings(previous_z: float, current_z: float) -> void:
+	if _signal_sync_gates.is_empty():
+		return
+	var low_z := minf(previous_z, current_z) - SIGNAL_SYNC_GATE_WINDOW_Z
+	var high_z := maxf(previous_z, current_z) + SIGNAL_SYNC_GATE_WINDOW_Z
+	for i in range(_signal_sync_gates.size() - 1, -1, -1):
+		var gate := _signal_sync_gates[i]
+		var z := float(gate.get("z", 0.0))
+		if z < low_z or z > high_z:
+			continue
+		var theta := float(gate.get("theta", 0.0))
+		var node: MeshInstance3D = gate.get("node")
+		var origin := node.global_position if node != null and is_instance_valid(node) else TunnelMath.surface_to_world(theta, z, _play_radius)
+		if signal_sync_gate_hit(_ball_theta, theta, _paddle_collision_width()):
+			_register_signal_sync_gate_hit(String(gate.get("band", "mid")), origin, i)
+		else:
+			_register_signal_sync_gate_miss(origin, i)
+
+func _register_signal_sync_gate_hit(band: String, origin: Vector3, index: int) -> void:
+	_chain_combo += 1
+	_combo_timeout = COMBO_RESET_TIME * 1.35
+	RunManager.add_score(signal_sync_gate_score(_chain_combo, _device_audio_pulse, _audio_bpm_confidence))
+	_spawn_ball_impact_burst(origin, _signal_sync_band_color(band), 1.35)
+	_flash_paddle()
+	_start_camera_shake(0.045 + _device_audio_pulse * 0.04, 0.13)
+	_pulse_haptic(30, 0.55 + _device_audio_pulse * 0.35)
+	_remove_signal_sync_gate(index)
+	_show_message("%s SYNC +%d" % [band.to_upper(), _chain_combo], 0.45)
+
+func _register_signal_sync_gate_miss(origin: Vector3, index: int) -> void:
+	_chain_combo = maxi(_chain_combo - SIGNAL_SYNC_GATE_MISS_PENALTY, 0)
+	_combo_timeout = minf(_combo_timeout, COMBO_RESET_TIME * 0.45)
+	_spawn_ball_impact_burst(origin, Color(0.45, 0.5, 0.58, 0.7), 0.42)
+	_remove_signal_sync_gate(index)
+
+func _remove_signal_sync_gate(index: int) -> void:
+	if index < 0 or index >= _signal_sync_gates.size():
+		return
+	var gate := _signal_sync_gates[index]
+	var node: MeshInstance3D = gate.get("node")
+	if node != null and is_instance_valid(node):
+		node.queue_free()
+	_signal_sync_gates.remove_at(index)
+
+func _clear_signal_sync_gates() -> void:
+	for gate in _signal_sync_gates:
+		var node: MeshInstance3D = gate.get("node")
+		if node != null and is_instance_valid(node):
+			node.queue_free()
+	_signal_sync_gates.clear()
+	_signal_sync_spawn_cooldown = 0.0
+	_signal_sync_metronome_time = 0.0
+	_signal_sync_audio_onset = false
 
 func _make_powerup_node(power_type: String) -> MeshInstance3D:
 	var node := MeshInstance3D.new()
@@ -1530,6 +1707,40 @@ static func tunnel_texture_speed_for_audio_bpm(base_speed: float, bpm: float, co
 	var kick_boost := safe_beat_kick * effective_confidence * AUDIO_BPM_BEAT_SPEED_KICK
 	return clampf(blended_speed + pulse_boost + kick_boost, TUNNEL_TEXTURE_BASE_SPEED, TUNNEL_TEXTURE_MAX_SPEED)
 
+static func run_style_display_text(style: String) -> String:
+	match style.strip_edges().to_lower():
+		STYLE_OVERDRIVE:
+			return "OVERDRIVE"
+		STYLE_SIGNAL_SYNC:
+			return "SIGNAL SYNC"
+		_:
+			return "STABILITY"
+
+static func signal_sync_band_from_levels(bass: float, mid: float, treble: float) -> String:
+	var safe_bass := clampf(bass, 0.0, 1.0)
+	var safe_mid := clampf(mid, 0.0, 1.0)
+	var safe_treble := clampf(treble, 0.0, 1.0)
+	if safe_bass >= safe_mid and safe_bass >= safe_treble:
+		return "bass"
+	if safe_treble >= safe_mid:
+		return "treble"
+	return "mid"
+
+static func signal_sync_lane_theta(lane_index: int, lane_count: int = SIGNAL_SYNC_LANE_COUNT) -> float:
+	var safe_count: int = maxi(lane_count, 1)
+	var lane: int = posmod(lane_index, safe_count)
+	return TunnelMath.wrap_angle((float(lane) / float(safe_count)) * TAU - PI)
+
+static func signal_sync_gate_hit(ball_theta: float, gate_theta: float, paddle_width: float) -> bool:
+	var window := maxf(SIGNAL_SYNC_GATE_THETA_WINDOW, paddle_width * 0.42)
+	return absf(TunnelMath.theta_distance(ball_theta, gate_theta)) <= window
+
+static func signal_sync_gate_score(chain_combo: int, pulse: float, confidence: float) -> int:
+	var pulse_bonus := clampf(pulse, 0.0, DEVICE_AUDIO_PULSE_MAX) * 70.0
+	var confidence_bonus := clampf(confidence, 0.0, 1.0) * 80.0
+	var combo_bonus := float(maxi(chain_combo, 0)) * 18.0
+	return int(round(float(SIGNAL_SYNC_GATE_POINTS) + pulse_bonus + confidence_bonus + combo_bonus))
+
 static func is_tunnel_layout_id(layout_id: String) -> bool:
 	return TUNNEL_LAYOUT_PRESETS.has(layout_id.strip_edges().to_lower())
 
@@ -2000,6 +2211,7 @@ func _step_device_audio_pulse(delta: float) -> void:
 	_device_audio_treble = float(next_state.get("treble", 0.0))
 	if OS.has_feature("web") and _device_audio_analyzer != null and analyzer_state_available:
 		_device_audio_source_label = DEVICE_AUDIO_SOURCE_WEB
+	_signal_sync_audio_onset = _device_audio_available and audio_beat_onset(_device_audio_pulse, previous_pulse, _device_audio_energy, previous_energy)
 	_step_audio_bpm(delta, previous_pulse, previous_energy)
 	if _tunnel_material != null:
 		_tunnel_material.set_shader_parameter("device_audio_pulse", _device_audio_pulse)
@@ -2274,7 +2486,7 @@ func _update_hud() -> void:
 	objective_label.text = hud_pressure_text(RunManager.run_score, _rival_target)
 	var power_status := _powerup_status_text()
 	style_label.text = "%s%s%s" % [
-		"MODE OVERDRIVE" if _run_style == STYLE_OVERDRIVE else "MODE STABILITY",
+		"MODE " + run_style_display_text(_run_style),
 		"  (assist active)" if SaveStore.fail_streak >= 2 else "",
 		"  /  " + power_status if not power_status.is_empty() else ""
 	]
