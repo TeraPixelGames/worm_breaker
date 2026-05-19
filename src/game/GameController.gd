@@ -54,6 +54,60 @@ const PORTAL_SPEED_ACCELERATION: float = 0.85
 const TUNNEL_TEXTURE_BASE_SPEED: float = 0.62
 const TUNNEL_TEXTURE_MAX_SPEED: float = 2.6
 const TUNNEL_TEXTURE_SPEED_ACCELERATION: float = 1.1
+const TUNNEL_LAYOUT_TRANSITION_DURATION: float = 1.15
+const TUNNEL_LAYOUT_LINEUP_ENV := "WORM_BREAKER_TUNNEL_LINEUP"
+const TUNNEL_LAYOUT_DEFAULT := "projectm_grid"
+const TUNNEL_LAYOUT_DEFAULT_LINEUP: Array[String] = ["projectm_grid", "amber_mesh", "signal_lattice"]
+const TUNNEL_LAYOUT_PRESETS: Dictionary = {
+	"projectm_grid": {
+		"base_color": Color(0.018, 0.0, 0.055, 1.0),
+		"hue_origin": 0.76,
+		"hue_motion": 0.08,
+		"near_offset": 0.48,
+		"far_offset": 0.12,
+		"near_saturation": 0.74,
+		"far_saturation": 0.92,
+		"projectm_overlay_strength": 0.32,
+		"depth_scale": 18.0,
+		"angle_repeats": 9.0,
+		"spoke_repeats": 12.0,
+		"kaleido_segments": 12.0,
+		"circuit_density": 40.0,
+		"ring_frequency": 0.72
+	},
+	"amber_mesh": {
+		"base_color": Color(0.055, 0.014, 0.0, 1.0),
+		"hue_origin": 0.08,
+		"hue_motion": 0.045,
+		"near_offset": 0.08,
+		"far_offset": 0.21,
+		"near_saturation": 0.86,
+		"far_saturation": 0.78,
+		"projectm_overlay_strength": 0.24,
+		"depth_scale": 14.0,
+		"angle_repeats": 6.0,
+		"spoke_repeats": 8.0,
+		"kaleido_segments": 8.0,
+		"circuit_density": 26.0,
+		"ring_frequency": 0.58
+	},
+	"signal_lattice": {
+		"base_color": Color(0.0, 0.018, 0.04, 1.0),
+		"hue_origin": 0.43,
+		"hue_motion": 0.06,
+		"near_offset": 0.02,
+		"far_offset": 0.62,
+		"near_saturation": 0.82,
+		"far_saturation": 0.88,
+		"projectm_overlay_strength": 0.38,
+		"depth_scale": 23.0,
+		"angle_repeats": 13.0,
+		"spoke_repeats": 18.0,
+		"kaleido_segments": 16.0,
+		"circuit_density": 54.0,
+		"ring_frequency": 0.94
+	}
+}
 const AUDIO_BPM_DEFAULT: float = 120.0
 const AUDIO_BPM_MIN: float = 70.0
 const AUDIO_BPM_MAX: float = 180.0
@@ -158,6 +212,11 @@ var _rival_target: int = 1200
 var _tunnel_material: ShaderMaterial
 var _tunnel_texture_phase: float = 0.0
 var _tunnel_texture_speed: float = TUNNEL_TEXTURE_BASE_SPEED
+var _tunnel_layout_lineup: PackedStringArray = PackedStringArray()
+var _current_tunnel_layout_id: String = TUNNEL_LAYOUT_DEFAULT
+var _previous_tunnel_layout_id: String = TUNNEL_LAYOUT_DEFAULT
+var _target_tunnel_layout_id: String = TUNNEL_LAYOUT_DEFAULT
+var _tunnel_layout_transition_time: float = TUNNEL_LAYOUT_TRANSITION_DURATION
 var _device_audio_analyzer: Object
 var _device_audio_available: bool = false
 var _device_audio_energy: float = 0.0
@@ -243,6 +302,7 @@ func _ready() -> void:
 	_build_device_audio_debug_label()
 	_build_web_audio_connect_button()
 	_setup_device_audio_analyzer()
+	_tunnel_layout_lineup = _resolve_tunnel_layout_lineup()
 	_build_paddle_segments()
 	_load_level(max(1, RunManager.current_level_index))
 	_update_hud()
@@ -264,6 +324,7 @@ func _physics_process(delta: float) -> void:
 	_step_portal_motion(delta)
 	_step_device_audio_pulse(delta)
 	_step_tunnel_texture_motion(delta)
+	_step_tunnel_layout_transition(delta)
 	_update_psychedelic_materials()
 	_update_fractal_overlay()
 	_update_impact_particles(delta)
@@ -480,6 +541,7 @@ func _load_level(level_index: int) -> void:
 	if rot_input != null and rot_input.has_method("reset"):
 		rot_input.reset()
 	_level_end_z = _compute_level_end_z()
+	_begin_tunnel_layout_for_level(level_index, _tunnel_material == null)
 
 	_refresh_tunnel_visual()
 	_spawn_bricks()
@@ -531,12 +593,9 @@ func _refresh_tunnel_visual() -> void:
 	tunnel_material.set_shader_parameter("audio_bass", _device_audio_bass)
 	tunnel_material.set_shader_parameter("audio_mid", _device_audio_mid)
 	tunnel_material.set_shader_parameter("audio_treble", _device_audio_treble)
-	tunnel_material.set_shader_parameter("projectm_overlay_strength", 0.32)
-	tunnel_material.set_shader_parameter("base_color", Color(0.018, 0.0, 0.055, 1.0))
-	tunnel_material.set_shader_parameter("near_color", Color(0.0, 0.9, 0.95, 1.0))
-	tunnel_material.set_shader_parameter("far_color", Color(1.0, 0.1, 0.95, 1.0))
 	tunnel.material_override = tunnel_material
 	_tunnel_material = tunnel_material
+	_apply_tunnel_layout_material(0.86, 0.0)
 	_position_tunnel_end_portal()
 
 func _build_tunnel_end_portal() -> void:
@@ -1171,13 +1230,9 @@ func _camera_zoom_out_scale() -> float:
 
 func _update_psychedelic_materials() -> void:
 	if _tunnel_material != null:
-		var hue := fmod(0.76 + sin(_visual_time * 0.17) * 0.08, 1.0)
 		var pulse := 0.5 + 0.5 * sin(_visual_time * 0.9)
 		var audio_intensity := _device_audio_pulse * 0.58 + _device_audio_bass * 0.42
-		_tunnel_material.set_shader_parameter("hue_shift", hue)
-		_tunnel_material.set_shader_parameter("intensity", 0.78 + pulse * 0.26 + audio_intensity)
-		_tunnel_material.set_shader_parameter("near_color", Color.from_hsv(fmod(hue + 0.48, 1.0), 0.74, 1.0))
-		_tunnel_material.set_shader_parameter("far_color", Color.from_hsv(fmod(hue + 0.12, 1.0), 0.92, 1.0))
+		_apply_tunnel_layout_material(0.78 + pulse * 0.26 + audio_intensity, _visual_time)
 	if _ball_material != null:
 		var ball_hue := fmod(0.13 + _visual_time * 0.07, 1.0)
 		_ball_material.set_shader_parameter("ball_time", _visual_time)
@@ -1475,6 +1530,39 @@ static func tunnel_texture_speed_for_audio_bpm(base_speed: float, bpm: float, co
 	var kick_boost := safe_beat_kick * effective_confidence * AUDIO_BPM_BEAT_SPEED_KICK
 	return clampf(blended_speed + pulse_boost + kick_boost, TUNNEL_TEXTURE_BASE_SPEED, TUNNEL_TEXTURE_MAX_SPEED)
 
+static func is_tunnel_layout_id(layout_id: String) -> bool:
+	return TUNNEL_LAYOUT_PRESETS.has(layout_id.strip_edges().to_lower())
+
+static func normalized_tunnel_layout_lineup(raw_lineup: String) -> PackedStringArray:
+	var lineup := PackedStringArray()
+	for raw_item in raw_lineup.replace(";", ",").replace("|", ",").split(",", false):
+		var layout_id := String(raw_item).strip_edges().to_lower()
+		if is_tunnel_layout_id(layout_id) and not lineup.has(layout_id):
+			lineup.append(layout_id)
+	return lineup
+
+static func default_tunnel_layout_lineup() -> PackedStringArray:
+	var lineup := PackedStringArray()
+	for layout_id in TUNNEL_LAYOUT_DEFAULT_LINEUP:
+		lineup.append(layout_id)
+	return lineup
+
+static func tunnel_layout_for_level(level_index: int, level_data: Dictionary = {}, lineup: PackedStringArray = PackedStringArray()) -> String:
+	var level_layout := String(level_data.get("tunnel_layout", "")).strip_edges().to_lower()
+	if is_tunnel_layout_id(level_layout):
+		return level_layout
+	var active_lineup := lineup
+	if active_lineup.is_empty():
+		active_lineup = default_tunnel_layout_lineup()
+	if active_lineup.is_empty():
+		return TUNNEL_LAYOUT_DEFAULT
+	var index := posmod(maxi(level_index, 1) - 1, active_lineup.size())
+	return active_lineup[index]
+
+static func tunnel_layout_transition_blend(elapsed: float, duration: float = TUNNEL_LAYOUT_TRANSITION_DURATION) -> float:
+	var t := 1.0 if duration <= 0.0 else clampf(elapsed / duration, 0.0, 1.0)
+	return t * t * (3.0 - 2.0 * t)
+
 static func device_audio_pulse_target(energy: float, previous_energy: float) -> float:
 	var safe_energy := maxf(energy, 0.0)
 	var safe_previous := maxf(previous_energy, 0.0)
@@ -1622,6 +1710,86 @@ func _step_tunnel_texture_motion(delta: float) -> void:
 	_tunnel_texture_speed = smoothed_tunnel_texture_speed(_tunnel_texture_speed, target_speed, delta)
 	_tunnel_texture_phase = fmod(_tunnel_texture_phase + delta * _tunnel_texture_speed, 10000.0)
 	_tunnel_material.set_shader_parameter("tunnel_phase", _tunnel_texture_phase)
+
+func _step_tunnel_layout_transition(delta: float) -> void:
+	if _tunnel_layout_transition_time >= TUNNEL_LAYOUT_TRANSITION_DURATION:
+		return
+	_tunnel_layout_transition_time = minf(_tunnel_layout_transition_time + maxf(delta, 0.0), TUNNEL_LAYOUT_TRANSITION_DURATION)
+	if _tunnel_layout_transition_time >= TUNNEL_LAYOUT_TRANSITION_DURATION:
+		_current_tunnel_layout_id = _target_tunnel_layout_id
+		_previous_tunnel_layout_id = _target_tunnel_layout_id
+
+func _begin_tunnel_layout_for_level(level_index: int, immediate: bool = false) -> void:
+	var next_layout := tunnel_layout_for_level(level_index, _level_data, _tunnel_layout_lineup)
+	if immediate or _target_tunnel_layout_id == next_layout:
+		_current_tunnel_layout_id = next_layout
+		_previous_tunnel_layout_id = next_layout
+		_target_tunnel_layout_id = next_layout
+		_tunnel_layout_transition_time = TUNNEL_LAYOUT_TRANSITION_DURATION
+		return
+	_previous_tunnel_layout_id = _current_tunnel_layout_id
+	_target_tunnel_layout_id = next_layout
+	_tunnel_layout_transition_time = 0.0
+
+func _resolve_tunnel_layout_lineup() -> PackedStringArray:
+	var forced_layout := _query_or_environment_tunnel_value("tunnel_layout")
+	if not forced_layout.is_empty() and is_tunnel_layout_id(forced_layout):
+		return PackedStringArray([forced_layout.strip_edges().to_lower()])
+	var lineup_text := _query_or_environment_tunnel_value("tunnel_lineup")
+	var lineup := normalized_tunnel_layout_lineup(lineup_text)
+	if lineup.is_empty():
+		lineup = normalized_tunnel_layout_lineup(OS.get_environment(TUNNEL_LAYOUT_LINEUP_ENV))
+	if lineup.is_empty():
+		lineup = default_tunnel_layout_lineup()
+	return lineup
+
+func _query_or_environment_tunnel_value(param_name: String) -> String:
+	var env_name := "WORM_BREAKER_" + param_name.to_upper()
+	var value := OS.get_environment(env_name).strip_edges()
+	if not value.is_empty():
+		return value
+	if not OS.has_feature("web") or not ClassDB.class_exists("JavaScriptBridge"):
+		return ""
+	var js := "(new URLSearchParams(window.location.search).get('%s') || '')" % param_name
+	return str(JavaScriptBridge.eval(js, true)).strip_edges()
+
+func _apply_tunnel_layout_material(intensity: float, time_seconds: float) -> void:
+	if _tunnel_material == null:
+		return
+	var blend := tunnel_layout_transition_blend(_tunnel_layout_transition_time)
+	var previous := _tunnel_layout_preset(_previous_tunnel_layout_id)
+	var target := _tunnel_layout_preset(_target_tunnel_layout_id)
+	var hue_origin := _layout_lerp_float(previous, target, "hue_origin", blend)
+	var hue_motion := _layout_lerp_float(previous, target, "hue_motion", blend)
+	var hue := fmod(hue_origin + sin(time_seconds * 0.17) * hue_motion, 1.0)
+	var near_offset := _layout_lerp_float(previous, target, "near_offset", blend)
+	var far_offset := _layout_lerp_float(previous, target, "far_offset", blend)
+	_tunnel_material.set_shader_parameter("hue_shift", hue)
+	_tunnel_material.set_shader_parameter("intensity", intensity)
+	_tunnel_material.set_shader_parameter("base_color", _layout_lerp_color(previous, target, "base_color", blend))
+	_tunnel_material.set_shader_parameter("near_color", Color.from_hsv(fmod(hue + near_offset, 1.0), _layout_lerp_float(previous, target, "near_saturation", blend), 1.0))
+	_tunnel_material.set_shader_parameter("far_color", Color.from_hsv(fmod(hue + far_offset, 1.0), _layout_lerp_float(previous, target, "far_saturation", blend), 1.0))
+	_tunnel_material.set_shader_parameter("projectm_overlay_strength", _layout_lerp_float(previous, target, "projectm_overlay_strength", blend))
+	_tunnel_material.set_shader_parameter("layout_depth_scale", _layout_lerp_float(previous, target, "depth_scale", blend))
+	_tunnel_material.set_shader_parameter("layout_angle_repeats", _layout_lerp_float(previous, target, "angle_repeats", blend))
+	_tunnel_material.set_shader_parameter("layout_spoke_repeats", _layout_lerp_float(previous, target, "spoke_repeats", blend))
+	_tunnel_material.set_shader_parameter("layout_kaleido_segments", _layout_lerp_float(previous, target, "kaleido_segments", blend))
+	_tunnel_material.set_shader_parameter("layout_circuit_density", _layout_lerp_float(previous, target, "circuit_density", blend))
+	_tunnel_material.set_shader_parameter("layout_ring_frequency", _layout_lerp_float(previous, target, "ring_frequency", blend))
+
+func _tunnel_layout_preset(layout_id: String) -> Dictionary:
+	var key := layout_id.strip_edges().to_lower()
+	if TUNNEL_LAYOUT_PRESETS.has(key):
+		return TUNNEL_LAYOUT_PRESETS[key]
+	return TUNNEL_LAYOUT_PRESETS[TUNNEL_LAYOUT_DEFAULT]
+
+func _layout_lerp_float(previous: Dictionary, target: Dictionary, key: String, blend: float) -> float:
+	return lerpf(float(previous.get(key, target.get(key, 0.0))), float(target.get(key, previous.get(key, 0.0))), blend)
+
+func _layout_lerp_color(previous: Dictionary, target: Dictionary, key: String, blend: float) -> Color:
+	var from_color := previous.get(key, target.get(key, Color.WHITE)) as Color
+	var to_color := target.get(key, previous.get(key, Color.WHITE)) as Color
+	return from_color.lerp(to_color, blend)
 
 func _step_audio_bpm(delta: float, previous_pulse: float, previous_energy: float) -> void:
 	_audio_beat_time += maxf(delta, 0.0)
@@ -2050,7 +2218,8 @@ func _complete_level() -> void:
 	await get_tree().create_timer(PORTAL_BREACH_DURATION).timeout
 
 	if LevelLoader.has_level(_level_index + 1):
-		RunManager.start_level(_level_index + 1)
+		RunManager.current_level_index = _level_index + 1
+		_load_level(_level_index + 1)
 	else:
 		RunManager.go_to_results(true, _level_index, RunManager.run_score)
 
