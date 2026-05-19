@@ -63,6 +63,13 @@ func test_tunnel_background_textures_load() -> void:
 		var texture := load(path) as Texture2D
 		assert_true(texture != null, "%s should load as a texture" % path)
 
+func test_tunnel_shader_audio_shifts_background_colors() -> void:
+	var shader_source := FileAccess.get_file_as_string("res://src/shaders/fractals/tunnel_fractal_wrap.gdshader")
+	assert_true(shader_source.contains("audio_shift_background"), "Tunnel shader should color-shift sampled backgrounds from audio")
+	assert_true(shader_source.contains("audio_bass"), "Tunnel shader should use bass to change background colors")
+	assert_true(shader_source.contains("audio_mid"), "Tunnel shader should use mids to change background colors")
+	assert_true(shader_source.contains("audio_treble"), "Tunnel shader should use treble to change background colors")
+
 func test_original_portal_shader_loads_for_first_stage() -> void:
 	assert_true(ResourceLoader.exists("res://src/shaders/fractals/mandelbrot_portal.gdshader"), "Original tunnel end shader should exist")
 	var shader := load("res://src/shaders/fractals/mandelbrot_portal.gdshader") as Shader

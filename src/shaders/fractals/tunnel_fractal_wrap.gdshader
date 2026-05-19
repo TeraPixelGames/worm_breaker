@@ -66,6 +66,33 @@ vec3 palette(float t) {
 	return mix(a, b, clamp(t, 0.0, 1.0));
 }
 
+vec3 rgb_to_hsv(vec3 c) {
+	vec4 k = vec4(0.0, -1.0 / 3.0, 2.0 / 3.0, -1.0);
+	vec4 p = mix(vec4(c.bg, k.wz), vec4(c.gb, k.xy), step(c.b, c.g));
+	vec4 q = mix(vec4(p.xyw, c.r), vec4(c.r, p.yzx), step(p.x, c.r));
+	float d = q.x - min(q.w, q.y);
+	float e = 0.00001;
+	return vec3(abs(q.z + (q.w - q.y) / (6.0 * d + e)), d / (q.x + e), q.x);
+}
+
+vec3 hsv_to_rgb(vec3 c) {
+	vec3 p = abs(fract(c.xxx + vec3(0.0, 2.0 / 3.0, 1.0 / 3.0)) * 6.0 - 3.0);
+	return c.z * mix(vec3(1.0), clamp(p - 1.0, 0.0, 1.0), c.y);
+}
+
+vec3 audio_shift_background(vec3 background, float audio_drive, float theta, float depth) {
+	float band_balance = audio_bass * 0.16 - audio_treble * 0.12 + audio_mid * 0.055;
+	float pulse_sweep = device_audio_pulse * sin(theta * 6.28318 * 2.0 + depth * 0.42) * 0.075;
+	float hue_push = band_balance + pulse_sweep;
+	vec3 hsv = rgb_to_hsv(background);
+	hsv.x = fract(hsv.x + hue_push + hue_shift * audio_drive * 0.12);
+	hsv.y = clamp(hsv.y * (1.0 + audio_mid * 0.48 + device_audio_pulse * 0.16), 0.0, 1.0);
+	hsv.z = clamp(hsv.z * (1.0 + audio_bass * 0.22 + audio_treble * 0.18 + device_audio_pulse * 0.38), 0.0, 1.8);
+	vec3 shifted = hsv_to_rgb(hsv);
+	vec3 band_tint = near_color.rgb * (audio_mid * 0.18 + device_audio_pulse * 0.12) + far_color.rgb * (audio_treble * 0.2) + vec3(1.0, 0.55, 0.12) * audio_bass * 0.16;
+	return max(shifted, background) + band_tint * audio_drive;
+}
+
 float neon_band(float value, float width) {
 	float distance_to_center = abs(fract(value) - 0.5);
 	return 1.0 - smoothstep(width, width + 0.035, distance_to_center);
@@ -129,6 +156,7 @@ void fragment() {
 	vec3 previous_bg = texture(previous_background_texture, previous_bg_uv).rgb * previous_background_strength;
 	vec3 target_bg = texture(target_background_texture, target_bg_uv).rgb * target_background_strength;
 	vec3 background = mix(previous_bg, target_bg, background_texture_blend);
+	background = audio_shift_background(background, audio_drive, theta, warped_depth);
 	float background_luma = dot(background, vec3(0.2126, 0.7152, 0.0722));
 	color = mix(color, max(color, background * (0.72 + audio_drive * 0.32)), clamp(background_luma * 1.35, 0.0, 0.82));
 	color += background * (0.18 + audio_drive * 0.18);
