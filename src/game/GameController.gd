@@ -702,9 +702,9 @@ func _setup_ball_visual() -> void:
 
 	var mat: ShaderMaterial = ShaderMaterial.new()
 	mat.shader = SHADERTOY_ENERGY_BALL_SHADER
-	mat.set_shader_parameter("core_color", Color(0.12, 1.0, 0.86, 1.0))
-	mat.set_shader_parameter("hot_color", Color(1.0, 0.96, 0.24, 1.0))
-	mat.set_shader_parameter("edge_color", Color(1.0, 0.08, 0.78, 1.0))
+	mat.set_shader_parameter("core_color", Color(1.0, 0.38, 0.02, 1.0))
+	mat.set_shader_parameter("hot_color", Color(1.0, 0.93, 0.12, 1.0))
+	mat.set_shader_parameter("edge_color", Color(1.0, 0.58, 0.0, 1.0))
 	mat.set_shader_parameter("ball_time", _visual_time)
 	mat.set_shader_parameter("device_audio_pulse", _device_audio_pulse)
 	mat.set_shader_parameter("audio_bass", _device_audio_bass)
