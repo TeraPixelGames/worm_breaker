@@ -14,6 +14,7 @@ const FRACTAL_SHADERS: Array[Shader] = [
 const SIGNAL_GATE_SHADER: Shader = preload("res://src/shaders/signal_gate.gdshader")
 const MANDELBROT_PORTAL_SHADER: Shader = preload("res://src/shaders/fractals/mandelbrot_portal.gdshader")
 const TUNNEL_FRACTAL_SHADER: Shader = preload("res://src/shaders/fractals/tunnel_fractal_wrap.gdshader")
+const SHADERTOY_ENERGY_BALL_SHADER: Shader = preload("res://src/shaders/shadertoy_energy_ball.gdshader")
 const TUNNEL_FORWARD: Vector3 = Vector3(0.0, 0.0, 1.0)
 const BALL_THETA_RADIUS: float = 0.12
 const BALL_Z_RADIUS: float = 0.34
@@ -180,7 +181,7 @@ var _mic_audio_mute_effect_index: int = -1
 var _mic_audio_capture_instance: AudioEffectCapture
 var _game_audio_spectrum_effect_index: int = -1
 var _game_audio_spectrum_instance: AudioEffectSpectrumAnalyzerInstance
-var _ball_material: StandardMaterial3D
+var _ball_material: ShaderMaterial
 var _paddle_materials: Array[StandardMaterial3D] = []
 var _ball_trail_root: Node3D
 var _ball_trail_points: Array[Vector3] = []
@@ -699,12 +700,16 @@ func _setup_ball_visual() -> void:
 	sphere.rings = 16
 	ball_mesh.mesh = sphere
 
-	var mat: StandardMaterial3D = StandardMaterial3D.new()
-	mat.albedo_color = Color(0.94, 1.0, 0.32)
-	mat.emission_enabled = true
-	mat.emission = Color(0.2, 1.0, 0.86)
-	mat.emission_energy_multiplier = 1.8
-	mat.roughness = 0.16
+	var mat: ShaderMaterial = ShaderMaterial.new()
+	mat.shader = SHADERTOY_ENERGY_BALL_SHADER
+	mat.set_shader_parameter("core_color", Color(0.12, 1.0, 0.86, 1.0))
+	mat.set_shader_parameter("hot_color", Color(1.0, 0.96, 0.24, 1.0))
+	mat.set_shader_parameter("edge_color", Color(1.0, 0.08, 0.78, 1.0))
+	mat.set_shader_parameter("ball_time", _visual_time)
+	mat.set_shader_parameter("device_audio_pulse", _device_audio_pulse)
+	mat.set_shader_parameter("audio_bass", _device_audio_bass)
+	mat.set_shader_parameter("audio_mid", _device_audio_mid)
+	mat.set_shader_parameter("audio_treble", _device_audio_treble)
 	ball_mesh.material_override = mat
 	_ball_material = mat
 
@@ -1175,9 +1180,12 @@ func _update_psychedelic_materials() -> void:
 		_tunnel_material.set_shader_parameter("far_color", Color.from_hsv(fmod(hue + 0.12, 1.0), 0.92, 1.0))
 	if _ball_material != null:
 		var ball_hue := fmod(0.13 + _visual_time * 0.07, 1.0)
-		_ball_material.albedo_color = Color.from_hsv(ball_hue, 0.68, 1.0)
-		_ball_material.emission = Color.from_hsv(fmod(ball_hue + 0.38, 1.0), 0.95, 1.0)
-		_ball_material.emission_energy_multiplier = 1.6 + 0.55 * absf(sin(_visual_time * 4.2))
+		_ball_material.set_shader_parameter("ball_time", _visual_time)
+		_ball_material.set_shader_parameter("hue_shift", ball_hue)
+		_ball_material.set_shader_parameter("device_audio_pulse", _device_audio_pulse)
+		_ball_material.set_shader_parameter("audio_bass", _device_audio_bass)
+		_ball_material.set_shader_parameter("audio_mid", _device_audio_mid)
+		_ball_material.set_shader_parameter("audio_treble", _device_audio_treble)
 	for i in range(_paddle_materials.size()):
 		var material := _paddle_materials[i]
 		var hue := fmod(0.42 + _visual_time * 0.045 + float(i) * 0.035, 1.0)
