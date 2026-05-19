@@ -63,8 +63,8 @@ const TUNNEL_TEXTURE_MAX_SPEED: float = 2.6
 const TUNNEL_TEXTURE_SPEED_ACCELERATION: float = 1.1
 const TUNNEL_LAYOUT_TRANSITION_DURATION: float = 1.15
 const TUNNEL_LAYOUT_LINEUP_ENV := "WORM_BREAKER_TUNNEL_LINEUP"
-const TUNNEL_LAYOUT_DEFAULT := "projectm_grid"
-const TUNNEL_LAYOUT_DEFAULT_LINEUP: Array[String] = ["projectm_grid", "amber_mesh", "signal_lattice"]
+const TUNNEL_LAYOUT_DEFAULT := "neon_circuit_octagon"
+const TUNNEL_LAYOUT_DEFAULT_LINEUP: Array[String] = ["neon_circuit_octagon", "amber_crystal_lattice", "blue_waveform_rings", "violet_nebula_kaleido"]
 const PORTAL_LIGHT_DEFAULT := "original_mandelbrot"
 const PORTAL_LIGHT_DEFAULT_LINEUP: Array[String] = ["original_mandelbrot", "flowing_wires", "hex_bloom"]
 const PORTAL_LIGHT_PRESETS: Dictionary = {
@@ -110,6 +110,86 @@ const PORTAL_LIGHT_PRESETS: Dictionary = {
 	}
 }
 const TUNNEL_LAYOUT_PRESETS: Dictionary = {
+	"neon_circuit_octagon": {
+		"base_color": Color(0.006, 0.004, 0.024, 1.0),
+		"hue_origin": 0.83,
+		"hue_motion": 0.055,
+		"near_offset": 0.48,
+		"far_offset": 0.02,
+		"near_saturation": 0.9,
+		"far_saturation": 0.92,
+		"projectm_overlay_strength": 0.28,
+		"depth_scale": 17.0,
+		"angle_repeats": 9.0,
+		"spoke_repeats": 12.0,
+		"kaleido_segments": 12.0,
+		"circuit_density": 58.0,
+		"ring_frequency": 0.7,
+		"background_texture": "res://assets/tunnel_backgrounds/neon_circuit_octagon.png",
+		"background_strength": 0.58,
+		"background_scale": Vector2(1.0, 1.0),
+		"background_scroll": 0.028
+	},
+	"amber_crystal_lattice": {
+		"base_color": Color(0.035, 0.018, 0.0, 1.0),
+		"hue_origin": 0.11,
+		"hue_motion": 0.035,
+		"near_offset": 0.2,
+		"far_offset": 0.04,
+		"near_saturation": 0.92,
+		"far_saturation": 0.88,
+		"projectm_overlay_strength": 0.22,
+		"depth_scale": 14.0,
+		"angle_repeats": 6.0,
+		"spoke_repeats": 8.0,
+		"kaleido_segments": 8.0,
+		"circuit_density": 28.0,
+		"ring_frequency": 0.58,
+		"background_texture": "res://assets/tunnel_backgrounds/amber_crystal_lattice.png",
+		"background_strength": 0.54,
+		"background_scale": Vector2(1.0, 1.0),
+		"background_scroll": 0.018
+	},
+	"blue_waveform_rings": {
+		"base_color": Color(0.0, 0.006, 0.032, 1.0),
+		"hue_origin": 0.57,
+		"hue_motion": 0.04,
+		"near_offset": 0.02,
+		"far_offset": 0.18,
+		"near_saturation": 0.92,
+		"far_saturation": 0.86,
+		"projectm_overlay_strength": 0.34,
+		"depth_scale": 20.0,
+		"angle_repeats": 10.0,
+		"spoke_repeats": 18.0,
+		"kaleido_segments": 16.0,
+		"circuit_density": 44.0,
+		"ring_frequency": 0.88,
+		"background_texture": "res://assets/tunnel_backgrounds/blue_waveform_rings.png",
+		"background_strength": 0.62,
+		"background_scale": Vector2(1.0, 1.0),
+		"background_scroll": 0.045
+	},
+	"violet_nebula_kaleido": {
+		"base_color": Color(0.012, 0.0, 0.036, 1.0),
+		"hue_origin": 0.76,
+		"hue_motion": 0.075,
+		"near_offset": 0.38,
+		"far_offset": 0.78,
+		"near_saturation": 0.84,
+		"far_saturation": 0.88,
+		"projectm_overlay_strength": 0.32,
+		"depth_scale": 22.0,
+		"angle_repeats": 12.0,
+		"spoke_repeats": 16.0,
+		"kaleido_segments": 14.0,
+		"circuit_density": 36.0,
+		"ring_frequency": 0.76,
+		"background_texture": "res://assets/tunnel_backgrounds/violet_nebula_kaleido.png",
+		"background_strength": 0.56,
+		"background_scale": Vector2(1.0, 1.0),
+		"background_scroll": 0.024
+	},
 	"projectm_grid": {
 		"base_color": Color(0.018, 0.0, 0.055, 1.0),
 		"hue_origin": 0.76,
@@ -269,6 +349,7 @@ var _current_tunnel_layout_id: String = TUNNEL_LAYOUT_DEFAULT
 var _previous_tunnel_layout_id: String = TUNNEL_LAYOUT_DEFAULT
 var _target_tunnel_layout_id: String = TUNNEL_LAYOUT_DEFAULT
 var _tunnel_layout_transition_time: float = TUNNEL_LAYOUT_TRANSITION_DURATION
+var _tunnel_background_texture_cache: Dictionary = {}
 var _device_audio_analyzer: Object
 var _device_audio_available: bool = false
 var _device_audio_energy: float = 0.0
@@ -2088,12 +2169,31 @@ func _apply_tunnel_layout_material(intensity: float, time_seconds: float) -> voi
 	_tunnel_material.set_shader_parameter("layout_kaleido_segments", _layout_lerp_float(previous, target, "kaleido_segments", blend))
 	_tunnel_material.set_shader_parameter("layout_circuit_density", _layout_lerp_float(previous, target, "circuit_density", blend))
 	_tunnel_material.set_shader_parameter("layout_ring_frequency", _layout_lerp_float(previous, target, "ring_frequency", blend))
+	_tunnel_material.set_shader_parameter("previous_background_texture", _tunnel_background_texture_for_preset(previous))
+	_tunnel_material.set_shader_parameter("target_background_texture", _tunnel_background_texture_for_preset(target))
+	_tunnel_material.set_shader_parameter("background_texture_blend", blend)
+	_tunnel_material.set_shader_parameter("previous_background_strength", float(previous.get("background_strength", 0.0)))
+	_tunnel_material.set_shader_parameter("target_background_strength", float(target.get("background_strength", 0.0)))
+	_tunnel_material.set_shader_parameter("previous_background_scale", _layout_vector2(previous, "background_scale", Vector2.ONE))
+	_tunnel_material.set_shader_parameter("target_background_scale", _layout_vector2(target, "background_scale", Vector2.ONE))
+	_tunnel_material.set_shader_parameter("previous_background_scroll", float(previous.get("background_scroll", 0.0)))
+	_tunnel_material.set_shader_parameter("target_background_scroll", float(target.get("background_scroll", 0.0)))
 
 func _tunnel_layout_preset(layout_id: String) -> Dictionary:
 	var key := layout_id.strip_edges().to_lower()
 	if TUNNEL_LAYOUT_PRESETS.has(key):
 		return TUNNEL_LAYOUT_PRESETS[key]
 	return TUNNEL_LAYOUT_PRESETS[TUNNEL_LAYOUT_DEFAULT]
+
+func _tunnel_background_texture_for_preset(preset: Dictionary) -> Texture2D:
+	var path := String(preset.get("background_texture", ""))
+	if path.is_empty():
+		return null
+	if _tunnel_background_texture_cache.has(path):
+		return _tunnel_background_texture_cache[path]
+	var texture := load(path) as Texture2D
+	_tunnel_background_texture_cache[path] = texture
+	return texture
 
 func _layout_lerp_float(previous: Dictionary, target: Dictionary, key: String, blend: float) -> float:
 	return lerpf(float(previous.get(key, target.get(key, 0.0))), float(target.get(key, previous.get(key, 0.0))), blend)
@@ -2102,6 +2202,12 @@ func _layout_lerp_color(previous: Dictionary, target: Dictionary, key: String, b
 	var from_color := previous.get(key, target.get(key, Color.WHITE)) as Color
 	var to_color := target.get(key, previous.get(key, Color.WHITE)) as Color
 	return from_color.lerp(to_color, blend)
+
+func _layout_vector2(preset: Dictionary, key: String, fallback: Vector2) -> Vector2:
+	var value: Variant = preset.get(key, fallback)
+	if value is Vector2:
+		return value
+	return fallback
 
 func _step_audio_bpm(delta: float, previous_pulse: float, previous_energy: float) -> void:
 	_audio_beat_time += maxf(delta, 0.0)

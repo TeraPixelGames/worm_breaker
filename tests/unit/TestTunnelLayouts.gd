@@ -4,10 +4,11 @@ const GameController: Script = preload("res://src/game/GameController.gd")
 
 func test_default_tunnel_layout_lineup_rotates_by_level() -> void:
 	var lineup: PackedStringArray = GameController.default_tunnel_layout_lineup()
-	assert_equal(GameController.tunnel_layout_for_level(1, {}, lineup), "projectm_grid", "First level should use the current projectM grid layout")
-	assert_equal(GameController.tunnel_layout_for_level(2, {}, lineup), "amber_mesh", "Second level should rotate to the amber mesh layout")
-	assert_equal(GameController.tunnel_layout_for_level(3, {}, lineup), "signal_lattice", "Third level should rotate to the signal lattice layout")
-	assert_equal(GameController.tunnel_layout_for_level(4, {}, lineup), "projectm_grid", "Tunnel lineup should wrap after the last preset")
+	assert_equal(GameController.tunnel_layout_for_level(1, {}, lineup), "neon_circuit_octagon", "First level should use the neon circuit tunnel background")
+	assert_equal(GameController.tunnel_layout_for_level(2, {}, lineup), "amber_crystal_lattice", "Second level should rotate to the amber crystal tunnel background")
+	assert_equal(GameController.tunnel_layout_for_level(3, {}, lineup), "blue_waveform_rings", "Third level should rotate to the blue waveform tunnel background")
+	assert_equal(GameController.tunnel_layout_for_level(4, {}, lineup), "violet_nebula_kaleido", "Fourth level should rotate to the violet nebula tunnel background")
+	assert_equal(GameController.tunnel_layout_for_level(5, {}, lineup), "neon_circuit_octagon", "Tunnel lineup should wrap after the last preset")
 
 func test_tunnel_layout_level_data_overrides_lineup() -> void:
 	var lineup: PackedStringArray = GameController.normalized_tunnel_layout_lineup("projectm_grid,amber_mesh")
@@ -15,10 +16,10 @@ func test_tunnel_layout_level_data_overrides_lineup() -> void:
 	assert_equal(GameController.tunnel_layout_for_level(1, level_data, lineup), "signal_lattice", "Level data should be able to pin a specific tunnel layout")
 
 func test_tunnel_layout_lineup_parser_filters_unknown_entries() -> void:
-	var lineup: PackedStringArray = GameController.normalized_tunnel_layout_lineup(" signal_lattice,unknown,amber_mesh,signal_lattice ")
+	var lineup: PackedStringArray = GameController.normalized_tunnel_layout_lineup(" blue_waveform_rings,unknown,amber_crystal_lattice,blue_waveform_rings ")
 	assert_equal(lineup.size(), 2, "Tunnel lineup should ignore unknown and duplicate layout ids")
-	assert_equal(lineup[0], "signal_lattice", "Parser should preserve the first known layout order")
-	assert_equal(lineup[1], "amber_mesh", "Parser should keep later known layouts")
+	assert_equal(lineup[0], "blue_waveform_rings", "Parser should preserve the first known layout order")
+	assert_equal(lineup[1], "amber_crystal_lattice", "Parser should keep later known layouts")
 
 func test_tunnel_layout_transition_blend_is_smooth_and_bounded() -> void:
 	assert_equal(GameController.tunnel_layout_transition_blend(-1.0, 1.0), 0.0, "Layout transition should clamp negative time")
@@ -49,6 +50,18 @@ func test_tunnel_light_portal_shader_loads() -> void:
 	assert_true(ResourceLoader.exists("res://src/shaders/tunnel_light_portal.gdshader"), "Tunnel light portal shader should exist")
 	var shader := load("res://src/shaders/tunnel_light_portal.gdshader") as Shader
 	assert_true(shader != null, "Tunnel light portal shader should load")
+
+func test_tunnel_background_textures_load() -> void:
+	var paths: Array[String] = [
+		"res://assets/tunnel_backgrounds/neon_circuit_octagon.png",
+		"res://assets/tunnel_backgrounds/amber_crystal_lattice.png",
+		"res://assets/tunnel_backgrounds/blue_waveform_rings.png",
+		"res://assets/tunnel_backgrounds/violet_nebula_kaleido.png"
+	]
+	for path in paths:
+		assert_true(ResourceLoader.exists(path), "%s should exist" % path)
+		var texture := load(path) as Texture2D
+		assert_true(texture != null, "%s should load as a texture" % path)
 
 func test_original_portal_shader_loads_for_first_stage() -> void:
 	assert_true(ResourceLoader.exists("res://src/shaders/fractals/mandelbrot_portal.gdshader"), "Original tunnel end shader should exist")

@@ -19,6 +19,15 @@ uniform float layout_spoke_repeats : hint_range(4.0, 24.0) = 12.0;
 uniform float layout_kaleido_segments : hint_range(4.0, 24.0) = 12.0;
 uniform float layout_circuit_density : hint_range(12.0, 72.0) = 40.0;
 uniform float layout_ring_frequency : hint_range(0.35, 1.2) = 0.72;
+uniform sampler2D previous_background_texture : repeat_enable, filter_linear_mipmap;
+uniform sampler2D target_background_texture : repeat_enable, filter_linear_mipmap;
+uniform float background_texture_blend : hint_range(0.0, 1.0) = 1.0;
+uniform float previous_background_strength : hint_range(0.0, 1.0) = 0.0;
+uniform float target_background_strength : hint_range(0.0, 1.0) = 0.0;
+uniform vec2 previous_background_scale = vec2(1.0, 1.0);
+uniform vec2 target_background_scale = vec2(1.0, 1.0);
+uniform float previous_background_scroll = 0.0;
+uniform float target_background_scroll = 0.0;
 uniform vec4 base_color : source_color = vec4(0.018, 0.0, 0.055, 1.0);
 uniform vec4 near_color : source_color = vec4(0.02, 0.9, 0.95, 1.0);
 uniform vec4 far_color : source_color = vec4(1.0, 0.1, 0.95, 1.0);
@@ -115,6 +124,15 @@ void fragment() {
 	projectm_color += vec3(1.0, 0.95, 0.28) * beat_rings * audio_drive * 0.52;
 	color += projectm_color * overlay_mix;
 
+	vec2 previous_bg_uv = fract(vec2(theta * previous_background_scale.x, uv.y * previous_background_scale.y - tunnel_phase * previous_background_scroll));
+	vec2 target_bg_uv = fract(vec2(theta * target_background_scale.x, uv.y * target_background_scale.y - tunnel_phase * target_background_scroll));
+	vec3 previous_bg = texture(previous_background_texture, previous_bg_uv).rgb * previous_background_strength;
+	vec3 target_bg = texture(target_background_texture, target_bg_uv).rgb * target_background_strength;
+	vec3 background = mix(previous_bg, target_bg, background_texture_blend);
+	float background_luma = dot(background, vec3(0.2126, 0.7152, 0.0722));
+	color = mix(color, max(color, background * (0.72 + audio_drive * 0.32)), clamp(background_luma * 1.35, 0.0, 0.82));
+	color += background * (0.18 + audio_drive * 0.18);
+
 	ALBEDO = mix(base_color.rgb, color, 0.72);
-	EMISSION = color * (0.45 + brightness * 1.35 + projectm_mask * overlay_mix * 0.58 + device_audio_pulse * 0.72 + audio_bass * 0.48 + audio_mid * 0.24 + audio_treble * 0.36);
+	EMISSION = color * (0.45 + brightness * 1.35 + projectm_mask * overlay_mix * 0.58 + device_audio_pulse * 0.72 + audio_bass * 0.48 + audio_mid * 0.24 + audio_treble * 0.36 + background_luma * 0.28);
 }
