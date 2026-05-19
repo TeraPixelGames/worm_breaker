@@ -530,6 +530,7 @@ func _refresh_tunnel_visual() -> void:
 	tunnel_material.set_shader_parameter("audio_bass", _device_audio_bass)
 	tunnel_material.set_shader_parameter("audio_mid", _device_audio_mid)
 	tunnel_material.set_shader_parameter("audio_treble", _device_audio_treble)
+	tunnel_material.set_shader_parameter("projectm_overlay_strength", 0.86)
 	tunnel_material.set_shader_parameter("base_color", Color(0.018, 0.0, 0.055, 1.0))
 	tunnel_material.set_shader_parameter("near_color", Color(0.0, 0.9, 0.95, 1.0))
 	tunnel_material.set_shader_parameter("far_color", Color(1.0, 0.1, 0.95, 1.0))
