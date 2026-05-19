@@ -12,7 +12,7 @@ const FRACTAL_SHADERS: Array[Shader] = [
 	preload("res://src/shaders/fractals/julia_set.gdshader")
 ]
 const SIGNAL_GATE_SHADER: Shader = preload("res://src/shaders/signal_gate.gdshader")
-const MANDELBROT_PORTAL_SHADER: Shader = preload("res://src/shaders/fractals/mandelbrot_portal.gdshader")
+const TUNNEL_LIGHT_PORTAL_SHADER: Shader = preload("res://src/shaders/tunnel_light_portal.gdshader")
 const TUNNEL_FRACTAL_SHADER: Shader = preload("res://src/shaders/fractals/tunnel_fractal_wrap.gdshader")
 const SHADERTOY_ENERGY_BALL_SHADER: Shader = preload("res://src/shaders/shadertoy_energy_ball.gdshader")
 const TUNNEL_FORWARD: Vector3 = Vector3(0.0, 0.0, 1.0)
@@ -58,6 +58,40 @@ const TUNNEL_LAYOUT_TRANSITION_DURATION: float = 1.15
 const TUNNEL_LAYOUT_LINEUP_ENV := "WORM_BREAKER_TUNNEL_LINEUP"
 const TUNNEL_LAYOUT_DEFAULT := "projectm_grid"
 const TUNNEL_LAYOUT_DEFAULT_LINEUP: Array[String] = ["projectm_grid", "amber_mesh", "signal_lattice"]
+const PORTAL_LIGHT_DEFAULT := "radiant_core"
+const PORTAL_LIGHT_DEFAULT_LINEUP: Array[String] = ["radiant_core", "flowing_wires", "hex_bloom"]
+const PORTAL_LIGHT_PRESETS: Dictionary = {
+	"radiant_core": {
+		"variant": 0,
+		"primary_color": Color(0.08, 1.0, 0.9, 1.0),
+		"secondary_color": Color(1.0, 0.12, 0.82, 1.0),
+		"accent_color": Color(1.0, 0.92, 0.24, 1.0),
+		"ray_density": 18.0,
+		"ring_density": 8.0,
+		"wire_strength": 0.18,
+		"grid_strength": 0.12
+	},
+	"flowing_wires": {
+		"variant": 1,
+		"primary_color": Color(0.12, 0.42, 1.0, 1.0),
+		"secondary_color": Color(0.0, 1.0, 0.82, 1.0),
+		"accent_color": Color(1.0, 0.16, 0.92, 1.0),
+		"ray_density": 11.0,
+		"ring_density": 12.0,
+		"wire_strength": 0.78,
+		"grid_strength": 0.18
+	},
+	"hex_bloom": {
+		"variant": 2,
+		"primary_color": Color(1.0, 0.24, 0.08, 1.0),
+		"secondary_color": Color(0.15, 0.2, 1.0, 1.0),
+		"accent_color": Color(1.0, 0.88, 0.18, 1.0),
+		"ray_density": 9.0,
+		"ring_density": 15.0,
+		"wire_strength": 0.24,
+		"grid_strength": 0.72
+	}
+}
 const TUNNEL_LAYOUT_PRESETS: Dictionary = {
 	"projectm_grid": {
 		"base_color": Color(0.018, 0.0, 0.055, 1.0),
@@ -258,6 +292,8 @@ var _portal_cap: MeshInstance3D
 var _portal_material: ShaderMaterial
 var _portal_fractal_cap: MeshInstance3D
 var _portal_fractal_material: ShaderMaterial
+var _portal_light_lineup: PackedStringArray = PackedStringArray()
+var _current_portal_light_id: String = PORTAL_LIGHT_DEFAULT
 var _portal_phase: float = 0.0
 var _portal_animation_speed: float = PORTAL_BASE_ANIMATION_SPEED
 var _signal_gate_hit_timer: float = 0.0
@@ -303,6 +339,7 @@ func _ready() -> void:
 	_build_web_audio_connect_button()
 	_setup_device_audio_analyzer()
 	_tunnel_layout_lineup = _resolve_tunnel_layout_lineup()
+	_portal_light_lineup = _resolve_portal_light_lineup()
 	_build_paddle_segments()
 	_load_level(max(1, RunManager.current_level_index))
 	_update_hud()
@@ -542,6 +579,7 @@ func _load_level(level_index: int) -> void:
 		rot_input.reset()
 	_level_end_z = _compute_level_end_z()
 	_begin_tunnel_layout_for_level(level_index, _tunnel_material == null)
+	_begin_portal_light_for_level(level_index)
 
 	_refresh_tunnel_visual()
 	_spawn_bricks()
@@ -600,16 +638,16 @@ func _refresh_tunnel_visual() -> void:
 
 func _build_tunnel_end_portal() -> void:
 	_portal_fractal_cap = MeshInstance3D.new()
-	_portal_fractal_cap.name = "MandelbrotTunnelEnd"
+	_portal_fractal_cap.name = "TunnelLightEnd"
 	_portal_fractal_cap.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
 	_portal_fractal_material = ShaderMaterial.new()
-	_portal_fractal_material.shader = MANDELBROT_PORTAL_SHADER
+	_portal_fractal_material.shader = TUNNEL_LIGHT_PORTAL_SHADER
 	_portal_fractal_material.set_shader_parameter("alpha", 0.66)
 	_portal_fractal_material.set_shader_parameter("zoom", 2.5)
 	_portal_fractal_material.set_shader_parameter("drift", 0.5)
 	_portal_fractal_material.set_shader_parameter("portal_phase", _portal_phase)
-	_portal_fractal_material.set_shader_parameter("recursion_limit", 132)
 	_portal_fractal_cap.material_override = _portal_fractal_material
+	_apply_portal_light_material()
 	$World.add_child(_portal_fractal_cap)
 
 	_portal_cap = MeshInstance3D.new()
@@ -1563,6 +1601,35 @@ static func tunnel_layout_transition_blend(elapsed: float, duration: float = TUN
 	var t := 1.0 if duration <= 0.0 else clampf(elapsed / duration, 0.0, 1.0)
 	return t * t * (3.0 - 2.0 * t)
 
+static func is_portal_light_id(light_id: String) -> bool:
+	return PORTAL_LIGHT_PRESETS.has(light_id.strip_edges().to_lower())
+
+static func normalized_portal_light_lineup(raw_lineup: String) -> PackedStringArray:
+	var lineup := PackedStringArray()
+	for raw_item in raw_lineup.replace(";", ",").replace("|", ",").split(",", false):
+		var light_id := String(raw_item).strip_edges().to_lower()
+		if is_portal_light_id(light_id) and not lineup.has(light_id):
+			lineup.append(light_id)
+	return lineup
+
+static func default_portal_light_lineup() -> PackedStringArray:
+	var lineup := PackedStringArray()
+	for light_id in PORTAL_LIGHT_DEFAULT_LINEUP:
+		lineup.append(light_id)
+	return lineup
+
+static func portal_light_for_level(level_index: int, level_data: Dictionary = {}, lineup: PackedStringArray = PackedStringArray()) -> String:
+	var level_light := String(level_data.get("portal_light", "")).strip_edges().to_lower()
+	if is_portal_light_id(level_light):
+		return level_light
+	var active_lineup := lineup
+	if active_lineup.is_empty():
+		active_lineup = default_portal_light_lineup()
+	if active_lineup.is_empty():
+		return PORTAL_LIGHT_DEFAULT
+	var index := posmod(maxi(level_index, 1) - 1, active_lineup.size())
+	return active_lineup[index]
+
 static func device_audio_pulse_target(energy: float, previous_energy: float) -> float:
 	var safe_energy := maxf(energy, 0.0)
 	var safe_previous := maxf(previous_energy, 0.0)
@@ -1743,6 +1810,18 @@ func _resolve_tunnel_layout_lineup() -> PackedStringArray:
 		lineup = default_tunnel_layout_lineup()
 	return lineup
 
+func _resolve_portal_light_lineup() -> PackedStringArray:
+	var forced_light := _query_or_environment_tunnel_value("portal_light")
+	if not forced_light.is_empty() and is_portal_light_id(forced_light):
+		return PackedStringArray([forced_light.strip_edges().to_lower()])
+	var lineup_text := _query_or_environment_tunnel_value("portal_light_lineup")
+	var lineup := normalized_portal_light_lineup(lineup_text)
+	if lineup.is_empty():
+		lineup = normalized_portal_light_lineup(OS.get_environment("WORM_BREAKER_PORTAL_LIGHT_LINEUP"))
+	if lineup.is_empty():
+		lineup = default_portal_light_lineup()
+	return lineup
+
 func _query_or_environment_tunnel_value(param_name: String) -> String:
 	var env_name := "WORM_BREAKER_" + param_name.to_upper()
 	var value := OS.get_environment(env_name).strip_edges()
@@ -1752,6 +1831,29 @@ func _query_or_environment_tunnel_value(param_name: String) -> String:
 		return ""
 	var js := "(new URLSearchParams(window.location.search).get('%s') || '')" % param_name
 	return str(JavaScriptBridge.eval(js, true)).strip_edges()
+
+func _begin_portal_light_for_level(level_index: int) -> void:
+	_current_portal_light_id = portal_light_for_level(level_index, _level_data, _portal_light_lineup)
+	_apply_portal_light_material()
+
+func _apply_portal_light_material() -> void:
+	if _portal_fractal_material == null:
+		return
+	var preset := _portal_light_preset(_current_portal_light_id)
+	_portal_fractal_material.set_shader_parameter("portal_variant", int(preset.get("variant", 0)))
+	_portal_fractal_material.set_shader_parameter("primary_color", preset.get("primary_color", Color(0.08, 1.0, 0.9, 1.0)))
+	_portal_fractal_material.set_shader_parameter("secondary_color", preset.get("secondary_color", Color(1.0, 0.12, 0.82, 1.0)))
+	_portal_fractal_material.set_shader_parameter("accent_color", preset.get("accent_color", Color(1.0, 0.92, 0.24, 1.0)))
+	_portal_fractal_material.set_shader_parameter("ray_density", float(preset.get("ray_density", 14.0)))
+	_portal_fractal_material.set_shader_parameter("ring_density", float(preset.get("ring_density", 9.0)))
+	_portal_fractal_material.set_shader_parameter("wire_strength", float(preset.get("wire_strength", 0.45)))
+	_portal_fractal_material.set_shader_parameter("grid_strength", float(preset.get("grid_strength", 0.32)))
+
+func _portal_light_preset(light_id: String) -> Dictionary:
+	var key := light_id.strip_edges().to_lower()
+	if PORTAL_LIGHT_PRESETS.has(key):
+		return PORTAL_LIGHT_PRESETS[key]
+	return PORTAL_LIGHT_PRESETS[PORTAL_LIGHT_DEFAULT]
 
 func _apply_tunnel_layout_material(intensity: float, time_seconds: float) -> void:
 	if _tunnel_material == null:

@@ -41,6 +41,7 @@ static func _normalize_level(level_data: Dictionary, level_index: int) -> Dictio
 	normalized["start_speed_theta"] = float(level_data.get("start_speed_theta", 0.3))
 	normalized["start_speed_z"] = float(level_data.get("start_speed_z", 8.0))
 	normalized["tunnel_layout"] = String(level_data.get("tunnel_layout", ""))
+	normalized["portal_light"] = String(level_data.get("portal_light", ""))
 
 	var bricks: Array[Dictionary] = []
 	var source_bricks: Array = level_data.get("bricks", [])
