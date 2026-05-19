@@ -12,6 +12,7 @@ const FRACTAL_SHADERS: Array[Shader] = [
 	preload("res://src/shaders/fractals/julia_set.gdshader")
 ]
 const SIGNAL_GATE_SHADER: Shader = preload("res://src/shaders/signal_gate.gdshader")
+const MANDELBROT_PORTAL_SHADER: Shader = preload("res://src/shaders/fractals/mandelbrot_portal.gdshader")
 const TUNNEL_LIGHT_PORTAL_SHADER: Shader = preload("res://src/shaders/tunnel_light_portal.gdshader")
 const TUNNEL_FRACTAL_SHADER: Shader = preload("res://src/shaders/fractals/tunnel_fractal_wrap.gdshader")
 const SHADERTOY_ENERGY_BALL_SHADER: Shader = preload("res://src/shaders/shadertoy_energy_ball.gdshader")
@@ -58,10 +59,18 @@ const TUNNEL_LAYOUT_TRANSITION_DURATION: float = 1.15
 const TUNNEL_LAYOUT_LINEUP_ENV := "WORM_BREAKER_TUNNEL_LINEUP"
 const TUNNEL_LAYOUT_DEFAULT := "projectm_grid"
 const TUNNEL_LAYOUT_DEFAULT_LINEUP: Array[String] = ["projectm_grid", "amber_mesh", "signal_lattice"]
-const PORTAL_LIGHT_DEFAULT := "radiant_core"
-const PORTAL_LIGHT_DEFAULT_LINEUP: Array[String] = ["radiant_core", "flowing_wires", "hex_bloom"]
+const PORTAL_LIGHT_DEFAULT := "original_mandelbrot"
+const PORTAL_LIGHT_DEFAULT_LINEUP: Array[String] = ["original_mandelbrot", "flowing_wires", "hex_bloom"]
 const PORTAL_LIGHT_PRESETS: Dictionary = {
+	"original_mandelbrot": {
+		"shader": "mandelbrot",
+		"alpha": 0.66,
+		"zoom": 2.5,
+		"drift": 0.5,
+		"recursion_limit": 132
+	},
 	"radiant_core": {
+		"shader": "light",
 		"variant": 0,
 		"primary_color": Color(0.08, 1.0, 0.9, 1.0),
 		"secondary_color": Color(1.0, 0.12, 0.82, 1.0),
@@ -72,6 +81,7 @@ const PORTAL_LIGHT_PRESETS: Dictionary = {
 		"grid_strength": 0.12
 	},
 	"flowing_wires": {
+		"shader": "light",
 		"variant": 1,
 		"primary_color": Color(0.12, 0.42, 1.0, 1.0),
 		"secondary_color": Color(0.0, 1.0, 0.82, 1.0),
@@ -82,6 +92,7 @@ const PORTAL_LIGHT_PRESETS: Dictionary = {
 		"grid_strength": 0.18
 	},
 	"hex_bloom": {
+		"shader": "light",
 		"variant": 2,
 		"primary_color": Color(1.0, 0.24, 0.08, 1.0),
 		"secondary_color": Color(0.15, 0.2, 1.0, 1.0),
@@ -1290,8 +1301,10 @@ func _update_psychedelic_materials() -> void:
 		material.emission_energy_multiplier = 0.65 + 0.28 * absf(sin(_visual_time * 2.4 + float(i))) + flash_boost
 	if _portal_fractal_material != null and not _pending_transition:
 		var portal_pulse := 0.5 + 0.5 * sin(_visual_time * 1.1)
-		_portal_fractal_material.set_shader_parameter("alpha", 0.58 + portal_pulse * 0.12 + _device_audio_mid * 0.14)
-		_portal_fractal_material.set_shader_parameter("zoom", 2.45 + portal_pulse * 0.24 + _device_audio_mid * 0.32)
+		var portal_audio := clampf(_device_audio_pulse * 0.42 + _device_audio_bass * 0.24 + _device_audio_mid * 0.2 + _device_audio_treble * 0.14, 0.0, 1.0)
+		_portal_fractal_material.set_shader_parameter("alpha", 0.58 + portal_pulse * 0.12 + portal_audio * 0.2)
+		_portal_fractal_material.set_shader_parameter("zoom", 2.45 + portal_pulse * 0.24 + _device_audio_bass * 0.26 + _device_audio_mid * 0.22)
+		_portal_fractal_material.set_shader_parameter("drift", 0.5 + portal_audio * 0.5)
 	if _portal_material != null and not _pending_transition:
 		var gate_pulse := 0.5 + 0.5 * sin(_visual_time * 2.0)
 		_portal_material.set_shader_parameter("alpha", 0.28 + gate_pulse * 0.08 + _device_audio_treble * 0.12)
@@ -1840,20 +1853,37 @@ func _apply_portal_light_material() -> void:
 	if _portal_fractal_material == null:
 		return
 	var preset := _portal_light_preset(_current_portal_light_id)
-	_portal_fractal_material.set_shader_parameter("portal_variant", int(preset.get("variant", 0)))
-	_portal_fractal_material.set_shader_parameter("primary_color", preset.get("primary_color", Color(0.08, 1.0, 0.9, 1.0)))
-	_portal_fractal_material.set_shader_parameter("secondary_color", preset.get("secondary_color", Color(1.0, 0.12, 0.82, 1.0)))
-	_portal_fractal_material.set_shader_parameter("accent_color", preset.get("accent_color", Color(1.0, 0.92, 0.24, 1.0)))
-	_portal_fractal_material.set_shader_parameter("ray_density", float(preset.get("ray_density", 14.0)))
-	_portal_fractal_material.set_shader_parameter("ring_density", float(preset.get("ring_density", 9.0)))
-	_portal_fractal_material.set_shader_parameter("wire_strength", float(preset.get("wire_strength", 0.45)))
-	_portal_fractal_material.set_shader_parameter("grid_strength", float(preset.get("grid_strength", 0.32)))
+	if String(preset.get("shader", "light")) == "mandelbrot":
+		_portal_fractal_material.shader = MANDELBROT_PORTAL_SHADER
+		_portal_fractal_material.set_shader_parameter("alpha", float(preset.get("alpha", 0.66)))
+		_portal_fractal_material.set_shader_parameter("zoom", float(preset.get("zoom", 2.5)))
+		_portal_fractal_material.set_shader_parameter("drift", float(preset.get("drift", 0.5)))
+		_portal_fractal_material.set_shader_parameter("recursion_limit", int(preset.get("recursion_limit", 132)))
+	else:
+		_portal_fractal_material.shader = TUNNEL_LIGHT_PORTAL_SHADER
+		_portal_fractal_material.set_shader_parameter("portal_variant", int(preset.get("variant", 0)))
+		_portal_fractal_material.set_shader_parameter("primary_color", preset.get("primary_color", Color(0.08, 1.0, 0.9, 1.0)))
+		_portal_fractal_material.set_shader_parameter("secondary_color", preset.get("secondary_color", Color(1.0, 0.12, 0.82, 1.0)))
+		_portal_fractal_material.set_shader_parameter("accent_color", preset.get("accent_color", Color(1.0, 0.92, 0.24, 1.0)))
+		_portal_fractal_material.set_shader_parameter("ray_density", float(preset.get("ray_density", 14.0)))
+		_portal_fractal_material.set_shader_parameter("ring_density", float(preset.get("ring_density", 9.0)))
+		_portal_fractal_material.set_shader_parameter("wire_strength", float(preset.get("wire_strength", 0.45)))
+		_portal_fractal_material.set_shader_parameter("grid_strength", float(preset.get("grid_strength", 0.32)))
+	_sync_portal_audio_material()
 
 func _portal_light_preset(light_id: String) -> Dictionary:
 	var key := light_id.strip_edges().to_lower()
 	if PORTAL_LIGHT_PRESETS.has(key):
 		return PORTAL_LIGHT_PRESETS[key]
 	return PORTAL_LIGHT_PRESETS[PORTAL_LIGHT_DEFAULT]
+
+func _sync_portal_audio_material() -> void:
+	if _portal_fractal_material == null:
+		return
+	_portal_fractal_material.set_shader_parameter("device_audio_pulse", _device_audio_pulse)
+	_portal_fractal_material.set_shader_parameter("audio_bass", _device_audio_bass)
+	_portal_fractal_material.set_shader_parameter("audio_mid", _device_audio_mid)
+	_portal_fractal_material.set_shader_parameter("audio_treble", _device_audio_treble)
 
 func _apply_tunnel_layout_material(intensity: float, time_seconds: float) -> void:
 	if _tunnel_material == null:
@@ -2108,6 +2138,7 @@ func _step_device_audio_pulse(delta: float) -> void:
 		_tunnel_material.set_shader_parameter("audio_bass", _device_audio_bass)
 		_tunnel_material.set_shader_parameter("audio_mid", _device_audio_mid)
 		_tunnel_material.set_shader_parameter("audio_treble", _device_audio_treble)
+	_sync_portal_audio_material()
 
 func _game_audio_band_state() -> Dictionary:
 	if _game_audio_spectrum_instance == null:
@@ -2270,20 +2301,28 @@ func _build_fractal_overlay() -> void:
 func _update_fractal_overlay() -> void:
 	if _fractal_overlay_material == null or FRACTAL_SHADERS.is_empty():
 		return
+	var audio_drive := clampf(_device_audio_pulse * 0.52 + _device_audio_bass * 0.28 + _device_audio_mid * 0.18 + _device_audio_treble * 0.18, 0.0, 1.0)
 	var next_index := int(floor(_visual_time / 8.0)) % FRACTAL_SHADERS.size()
 	if next_index != _fractal_shader_index:
 		_fractal_shader_index = next_index
 		_fractal_overlay_material.shader = FRACTAL_SHADERS[_fractal_shader_index]
-		_fractal_overlay_material.set_shader_parameter("alpha", 0.045)
-		_fractal_overlay_material.set_shader_parameter("speed", 0.32)
 		if _fractal_shader_index == 3:
-			_fractal_overlay_material.set_shader_parameter("zoom", 2.8)
 			_fractal_overlay_material.set_shader_parameter("recursion_limit", 72)
 		elif _fractal_shader_index == 4:
-			_fractal_overlay_material.set_shader_parameter("zoom", 1.2)
 			_fractal_overlay_material.set_shader_parameter("recursion_limit", 72)
-		else:
-			_fractal_overlay_material.set_shader_parameter("zoom", 1.0)
+	_update_fractal_overlay_audio(audio_drive)
+
+func _update_fractal_overlay_audio(audio_drive: float) -> void:
+	if _fractal_overlay_material == null:
+		return
+	_fractal_overlay_material.set_shader_parameter("alpha", 0.045 + audio_drive * 0.075)
+	_fractal_overlay_material.set_shader_parameter("speed", 0.32 + _device_audio_bass * 0.42 + _device_audio_pulse * 0.32)
+	if _fractal_shader_index == 3:
+		_fractal_overlay_material.set_shader_parameter("zoom", 2.8 + _device_audio_mid * 0.65)
+	elif _fractal_shader_index == 4:
+		_fractal_overlay_material.set_shader_parameter("zoom", 1.2 + _device_audio_treble * 0.36)
+	else:
+		_fractal_overlay_material.set_shader_parameter("zoom", 1.0 + audio_drive * 0.22)
 
 func _start_camera_shake(amount: float, duration: float) -> void:
 	_shake_amount = max(_shake_amount, amount)

@@ -29,10 +29,10 @@ func test_tunnel_layout_transition_blend_is_smooth_and_bounded() -> void:
 
 func test_default_portal_light_lineup_rotates_by_level() -> void:
 	var lineup: PackedStringArray = GameController.default_portal_light_lineup()
-	assert_equal(GameController.portal_light_for_level(1, {}, lineup), "radiant_core", "First level should use the radiant portal core")
+	assert_equal(GameController.portal_light_for_level(1, {}, lineup), "original_mandelbrot", "First level should keep the original tunnel end background")
 	assert_equal(GameController.portal_light_for_level(2, {}, lineup), "flowing_wires", "Second level should rotate to the flowing wire portal")
 	assert_equal(GameController.portal_light_for_level(3, {}, lineup), "hex_bloom", "Third level should rotate to the hex bloom portal")
-	assert_equal(GameController.portal_light_for_level(4, {}, lineup), "radiant_core", "Portal light lineup should wrap after the last preset")
+	assert_equal(GameController.portal_light_for_level(4, {}, lineup), "original_mandelbrot", "Portal light lineup should wrap after the last preset")
 
 func test_portal_light_level_data_overrides_lineup() -> void:
 	var lineup: PackedStringArray = GameController.normalized_portal_light_lineup("radiant_core,flowing_wires")
@@ -49,3 +49,8 @@ func test_tunnel_light_portal_shader_loads() -> void:
 	assert_true(ResourceLoader.exists("res://src/shaders/tunnel_light_portal.gdshader"), "Tunnel light portal shader should exist")
 	var shader := load("res://src/shaders/tunnel_light_portal.gdshader") as Shader
 	assert_true(shader != null, "Tunnel light portal shader should load")
+
+func test_original_portal_shader_loads_for_first_stage() -> void:
+	assert_true(ResourceLoader.exists("res://src/shaders/fractals/mandelbrot_portal.gdshader"), "Original tunnel end shader should exist")
+	var shader := load("res://src/shaders/fractals/mandelbrot_portal.gdshader") as Shader
+	assert_true(shader != null, "Original tunnel end shader should load")

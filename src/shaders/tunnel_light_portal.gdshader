@@ -17,6 +17,10 @@ uniform float ray_density : hint_range(4.0, 32.0) = 14.0;
 uniform float ring_density : hint_range(2.0, 28.0) = 9.0;
 uniform float wire_strength : hint_range(0.0, 1.0) = 0.45;
 uniform float grid_strength : hint_range(0.0, 1.0) = 0.32;
+uniform float device_audio_pulse : hint_range(0.0, 1.0) = 0.0;
+uniform float audio_bass : hint_range(0.0, 1.0) = 0.0;
+uniform float audio_mid : hint_range(0.0, 1.0) = 0.0;
+uniform float audio_treble : hint_range(0.0, 1.0) = 0.0;
 
 float hash21(vec2 p) {
 	p = fract(p * vec2(123.34, 456.21));
@@ -78,17 +82,21 @@ void fragment() {
 	float radial = length(uv);
 	float angle = atan(uv.y, uv.x);
 	float time = portal_phase;
+	float audio_drive = clamp(device_audio_pulse * 0.62 + audio_bass * 0.36 + audio_mid * 0.24 + audio_treble * 0.22, 0.0, 1.0);
 	float mask = smoothstep(1.02, 0.74, radial);
 	float vignette = smoothstep(1.0, 0.1, radial);
-	float pulse = 0.5 + 0.5 * sin(time * 1.4 + radial * 10.0);
-	vec2 warped = uv * (1.0 + sin(radial * 5.0 - time * 0.45) * 0.04 * drift);
-	warped += vec2(sin(time * 0.27), cos(time * 0.31)) * 0.035 * drift;
+	float pulse = max(0.5 + 0.5 * sin(time * (1.4 + audio_mid * 0.24) + radial * 10.0), audio_drive);
+	vec2 warped = uv * (1.0 + sin(radial * (5.0 + audio_bass * 2.0) - time * 0.45) * (0.04 + audio_drive * 0.045) * drift);
+	warped += vec2(sin(time * (0.27 + audio_treble * 0.08)), cos(time * (0.31 + audio_mid * 0.07))) * (0.035 + audio_drive * 0.035) * drift;
 
 	vec3 color = variant_color(pulse, radial, angle, warped, time);
-	color += vec3(1.0) * pow(max(0.0, 1.0 - radial), 7.0) * (1.2 + zoom * 0.22);
-	color *= mask * (0.82 + vignette * 0.44);
+	color += vec3(1.0) * pow(max(0.0, 1.0 - radial), 7.0) * (1.2 + zoom * 0.22 + audio_drive * 0.9);
+	color += primary_color.rgb * audio_bass * line_band(radial * (ring_density + 2.0) - time * 0.34, 0.045) * 0.34;
+	color += secondary_color.rgb * audio_mid * spoke_line(angle + time * 0.12, ray_density + 3.0, 0.028) * 0.28;
+	color += accent_color.rgb * audio_treble * hex_grid(warped * 7.0 + time * 0.12) * 0.22;
+	color *= mask * (0.82 + vignette * 0.44 + audio_drive * 0.18);
 
 	ALBEDO = color;
-	EMISSION = color * (1.55 + pulse * 0.35);
-	ALPHA = alpha * mask;
+	EMISSION = color * (1.55 + pulse * 0.35 + audio_drive * 0.72);
+	ALPHA = alpha * mask * (1.0 + audio_drive * 0.12);
 }
