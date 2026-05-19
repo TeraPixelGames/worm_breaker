@@ -810,7 +810,7 @@ func _build_bent_tunnel_mesh() -> ArrayMesh:
 			var radial := TunnelMath.radial_from_angle(theta, z, _tunnel_bend_profile)
 			vertices.append(TunnelMath.surface_to_world(theta, z, radius, _tunnel_bend_profile))
 			normals.append(radial)
-			uvs.append(Vector2(float(ai) / float(TUNNEL_BEND_RADIAL_SEGMENTS), t))
+			uvs.append(bent_tunnel_uv(float(ai) / float(TUNNEL_BEND_RADIAL_SEGMENTS), t))
 	for zi in range(ring_count - 1):
 		for ai in range(TUNNEL_BEND_RADIAL_SEGMENTS):
 			var next_ai := (ai + 1) % TUNNEL_BEND_RADIAL_SEGMENTS
@@ -828,6 +828,9 @@ func _build_bent_tunnel_mesh() -> ArrayMesh:
 	var mesh := ArrayMesh.new()
 	mesh.add_surface_from_arrays(Mesh.PRIMITIVE_TRIANGLES, arrays)
 	return mesh
+
+static func bent_tunnel_uv(angle_fraction: float, depth_fraction: float) -> Vector2:
+	return Vector2(angle_fraction, 1.0 - depth_fraction)
 
 func _build_tunnel_end_portal() -> void:
 	_portal_fractal_cap = MeshInstance3D.new()

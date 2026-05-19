@@ -2,6 +2,7 @@ extends "res://tests/framework/TestCase.gd"
 
 const LevelLoader: Script = preload("res://src/game/LevelLoader.gd")
 const TunnelMath: Script = preload("res://src/game/TunnelMath.gd")
+const GameController: Script = preload("res://src/game/GameController.gd")
 
 func test_level_loader_defaults_tunnel_bend_disabled() -> void:
 	var normalized: Dictionary = LevelLoader._normalize_level({"bricks": []}, 1)
@@ -77,3 +78,7 @@ func test_bend_axes_are_normalized_and_orthogonal() -> void:
 	assert_true(absf(forward.dot(radial)) < 0.0001, "Forward and radial axes should be orthogonal")
 	assert_true(absf(forward.dot(around)) < 0.0001, "Forward and around axes should be orthogonal")
 	assert_true(absf(radial.dot(around)) < 0.0001, "Radial and around axes should be orthogonal")
+
+func test_bent_tunnel_uv_matches_straight_tunnel_scroll_direction() -> void:
+	assert_equal(GameController.bent_tunnel_uv(0.25, 0.0), Vector2(0.25, 1.0), "Near bend rings should use the same scroll direction as the straight tunnel")
+	assert_equal(GameController.bent_tunnel_uv(0.25, 1.0), Vector2(0.25, 0.0), "Far bend rings should invert generated depth before shader scroll")
