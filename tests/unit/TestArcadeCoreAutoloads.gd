@@ -14,6 +14,7 @@ func test_arcadecore_singletons_exist() -> void:
 	assert_true(autoloads.has("AudioManager"), "Missing AudioManager autoload")
 	assert_true(autoloads.has("Fx"), "Missing Fx autoload")
 	assert_true(autoloads.has("AdManager"), "Missing AdManager autoload")
+	assert_true(autoloads.has("WebAudioCapture"), "Missing WebAudioCapture autoload")
 
 func test_multiresolution_display_defaults() -> void:
 	var cfg := ConfigFile.new()

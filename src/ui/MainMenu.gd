@@ -23,11 +23,13 @@ const PANEL_INSET: float = 8.0
 var _time := 0.0
 var _rings: Array[Panel] = []
 var _fractal_material: ShaderMaterial
+var _web_audio_button: Button
 
 func _ready() -> void:
 	MusicManager.play_menu()
 	_build_psychedelic_backdrop()
 	_build_fractal_backdrop()
+	_build_web_audio_button()
 	_apply_launch_deck_style()
 	_update_launch_deck_layout()
 	var rival_target := SaveStore.refresh_rival_target()
@@ -51,6 +53,7 @@ func _process(delta: float) -> void:
 	panel.scale = Vector2.ONE
 	if _fractal_material != null:
 		_fractal_material.set_shader_parameter("zoom", 1.0 + 0.07 * sin(_time * 0.28))
+	_update_web_audio_button()
 	_update_panel_pivot()
 
 func _notification(what: int) -> void:
@@ -71,6 +74,11 @@ func _on_tutorial_button_pressed() -> void:
 
 func _on_quit_button_pressed() -> void:
 	get_tree().quit()
+
+func _on_web_audio_button_pressed() -> void:
+	var capture := get_node_or_null("/root/WebAudioCapture")
+	if capture != null and capture.has_method("start"):
+		capture.call("start")
 
 func _build_psychedelic_backdrop() -> void:
 	var background := get_node_or_null("Background")
@@ -158,11 +166,46 @@ func _apply_launch_deck_style() -> void:
 	_style_secondary_button(overdrive_button, Color(0.08, 0.0, 0.16, 0.84), Color(1.0, 0.82, 0.98, 0.96), Color(1.0, 0.05, 0.75, 0.58))
 	_style_secondary_button(tutorial_button, Color(0.08, 0.05, 0.0, 0.84), Color(1.0, 0.94, 0.58, 0.96), Color(1.0, 0.84, 0.1, 0.58))
 	_style_secondary_button(quit_button, Color(0.025, 0.02, 0.06, 0.78), Color(0.86, 0.9, 1.0, 0.88), Color(0.52, 0.62, 0.78, 0.36))
+	if _web_audio_button != null:
+		_style_secondary_button(_web_audio_button, Color(0.0, 0.1, 0.12, 0.86), Color(0.64, 1.0, 0.92, 0.96), Color(0.0, 1.0, 0.8, 0.54))
 	start_button.text = "PRESS TO LAUNCH"
 	overdrive_button.text = "OVERDRIVE"
 	tutorial_button.text = "TUTORIAL"
 	quit_button.text = "EXIT"
+	_update_web_audio_button()
 	_update_launch_deck_layout()
+
+func _build_web_audio_button() -> void:
+	if not OS.has_feature("web") or _web_audio_button != null:
+		return
+	var capture := get_node_or_null("/root/WebAudioCapture")
+	if capture == null or not capture.has_method("is_supported") or not bool(capture.call("is_supported")):
+		return
+	_web_audio_button = Button.new()
+	_web_audio_button.name = "WebAudioButton"
+	_web_audio_button.text = "CONNECT AUDIO"
+	_web_audio_button.focus_mode = Control.FOCUS_NONE
+	_web_audio_button.pressed.connect(_on_web_audio_button_pressed)
+	vbox.add_child(_web_audio_button)
+
+func _update_web_audio_button() -> void:
+	if _web_audio_button == null:
+		return
+	var capture := get_node_or_null("/root/WebAudioCapture")
+	var status := "unsupported"
+	var available := false
+	if capture != null:
+		if capture.has_method("get_status"):
+			status = str(capture.call("get_status"))
+		if capture.has_method("is_available"):
+			available = bool(capture.call("is_available"))
+	_web_audio_button.disabled = status == "starting" or available
+	if available:
+		_web_audio_button.text = "AUDIO CONNECTED"
+	elif status == "starting":
+		_web_audio_button.text = "CONNECTING..."
+	else:
+		_web_audio_button.text = "CONNECT AUDIO"
 
 func _update_launch_deck_layout() -> void:
 	if panel == null:

@@ -26,6 +26,7 @@ StreakManager="*res://addons/arcade_core/StreakManager.gd"
 AudioManager="*res://addons/arcade_core/AudioManager.gd"
 Fx="*res://addons/arcade_core/Fx.gd"
 AdManager="*res://addons/arcade_core/AdManager.gd"
+WebAudioCapture="*res://src/core/WebAudioCapture.gd"
 
 [audio]
 

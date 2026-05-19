@@ -14,7 +14,6 @@ const FRACTAL_SHADERS: Array[Shader] = [
 const SIGNAL_GATE_SHADER: Shader = preload("res://src/shaders/signal_gate.gdshader")
 const MANDELBROT_PORTAL_SHADER: Shader = preload("res://src/shaders/fractals/mandelbrot_portal.gdshader")
 const TUNNEL_FRACTAL_SHADER: Shader = preload("res://src/shaders/fractals/tunnel_fractal_wrap.gdshader")
-const WebSystemAudioAnalyzer = preload("res://src/game/WebSystemAudioAnalyzer.gd")
 const TUNNEL_FORWARD: Vector3 = Vector3(0.0, 0.0, 1.0)
 const BALL_THETA_RADIUS: float = 0.12
 const BALL_Z_RADIUS: float = 0.34
@@ -248,7 +247,7 @@ func _ready() -> void:
 	_update_hud()
 
 func _exit_tree() -> void:
-	if _device_audio_analyzer != null and _analyzer_has_method(_device_audio_analyzer, "stop"):
+	if _device_audio_analyzer != null and not OS.has_feature("web") and _analyzer_has_method(_device_audio_analyzer, "stop"):
 		_device_audio_analyzer.call("stop")
 	_teardown_mic_audio_fallback()
 	_teardown_game_audio_spectrum_fallback()
@@ -1657,8 +1656,8 @@ func _setup_device_audio_analyzer() -> void:
 
 func _setup_web_system_audio_capture() -> void:
 	_device_audio_source_label = DEVICE_AUDIO_SOURCE_WEB
-	var analyzer := WebSystemAudioAnalyzer.new()
-	if analyzer == null or not analyzer.is_supported():
+	var analyzer := get_node_or_null("/root/WebAudioCapture")
+	if analyzer == null or not analyzer.has_method("is_supported") or not bool(analyzer.call("is_supported")):
 		_setup_game_audio_spectrum_fallback()
 		return
 	_device_audio_analyzer = analyzer
