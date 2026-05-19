@@ -3,7 +3,7 @@ Wrapped fractal tunnel shader for Worm Breaker.
 Provides depth bands and angular landmarks on the cylinder wall.
 */
 shader_type spatial;
-render_mode unshaded, cull_disabled, depth_draw_opaque;
+render_mode unshaded, blend_mix, cull_disabled, depth_draw_never;
 
 uniform float tunnel_phase = 0.0;
 uniform float intensity : hint_range(0.0, 2.0) = 1.0;
@@ -161,6 +161,12 @@ void fragment() {
 	color = mix(color, max(color, background * (0.72 + audio_drive * 0.32)), clamp(background_luma * 1.35, 0.0, 0.82));
 	color += background * (0.18 + audio_drive * 0.18);
 
-	ALBEDO = mix(base_color.rgb, color, 0.72);
+	float signal_alpha = max(brightness * 0.22, projectm_mask * overlay_mix * 0.62);
+	float background_alpha = smoothstep(0.16, 0.72, background_luma) * (0.18 + audio_drive * 0.08);
+	float pulse_alpha = (beat_rings * 0.16 + mid_landmarks * 0.12 + treble_sparks * 0.10) * (0.35 + audio_drive);
+	float tunnel_alpha = clamp(signal_alpha + background_alpha + pulse_alpha, 0.0, 0.72);
+
+	ALBEDO = color;
 	EMISSION = color * (0.45 + brightness * 1.35 + projectm_mask * overlay_mix * 0.58 + device_audio_pulse * 0.72 + audio_bass * 0.48 + audio_mid * 0.24 + audio_treble * 0.36 + background_luma * 0.28);
+	ALPHA = tunnel_alpha;
 }
