@@ -40,6 +40,12 @@ const POWERUP_COLLECT_Z_WINDOW: float = 0.48
 const POWERUP_WIDE_DURATION: float = 7.0
 const POWERUP_SLOW_DURATION: float = 5.0
 const POWERUP_SLOW_MIN_Z_SPEED: float = 5.4
+const POWERUP_BLASTER_DURATION: float = 6.0
+const BLASTER_FIRE_INTERVAL: float = 0.38
+const BLASTER_SHOT_SPEED: float = 24.0
+const BLASTER_SHOT_RADIUS_THETA: float = 0.055
+const BLASTER_SHOT_RADIUS_Z: float = 0.26
+const BLASTER_SHOT_LIFETIME: float = 2.2
 const PORTAL_BREACH_DURATION: float = 1.18
 const SIGNAL_GATE_HIT_DURATION: float = 0.62
 const SIGNAL_GATE_SHARD_COUNT: int = 18
@@ -203,6 +209,7 @@ const STYLE_OVERDRIVE := "overdrive"
 const POWERUP_WIDE := "WIDE"
 const POWERUP_SLOW := "SLOW"
 const POWERUP_BLAST := "BLAST"
+const POWERUP_BLASTER := "BLASTER"
 
 @onready var tunnel: MeshInstance3D = $World/Tunnel
 @onready var paddle_root: Node3D = $World/PaddleRoot
@@ -297,8 +304,13 @@ var _impact_particle_root: Node3D
 var _impact_particles: Array[Dictionary] = []
 var _powerup_root: Node3D
 var _powerups: Array[Dictionary] = []
+var _blaster_root: Node3D
+var _blaster_mounts: Array[MeshInstance3D] = []
+var _blaster_shots: Array[Dictionary] = []
 var _wide_timer: float = 0.0
 var _slow_timer: float = 0.0
+var _blaster_timer: float = 0.0
+var _blaster_fire_cooldown: float = 0.0
 var _portal_cap: MeshInstance3D
 var _portal_material: ShaderMaterial
 var _portal_fractal_cap: MeshInstance3D
@@ -352,6 +364,7 @@ func _ready() -> void:
 	_tunnel_layout_lineup = _resolve_tunnel_layout_lineup()
 	_portal_light_lineup = _resolve_portal_light_lineup()
 	_build_paddle_segments()
+	_build_blaster_mounts()
 	_load_level(max(1, RunManager.current_level_index))
 	_update_hud()
 
@@ -394,6 +407,7 @@ func _physics_process(delta: float) -> void:
 
 	_step_combo(delta)
 	_step_powerup_timers(delta)
+	_step_blaster(delta)
 	_paddle_flash_timer = maxf(_paddle_flash_timer - delta, 0.0)
 	_step_paddle(delta)
 	_step_ball(delta)
@@ -558,6 +572,8 @@ func _load_level(level_index: int) -> void:
 	_combo_timeout = 0.0
 	_wide_timer = 0.0
 	_slow_timer = 0.0
+	_blaster_timer = 0.0
+	_blaster_fire_cooldown = 0.0
 	_pending_transition = false
 	_transition_mode = ""
 	_transition_time = 0.0
@@ -595,6 +611,7 @@ func _load_level(level_index: int) -> void:
 	_refresh_tunnel_visual()
 	_spawn_bricks()
 	_clear_powerups()
+	_clear_blaster_shots()
 	_update_ball_visual()
 	_reset_ball_tracers()
 	_update_paddle_visual()
@@ -905,6 +922,50 @@ func _build_powerup_root() -> void:
 	$World.add_child(_powerup_root)
 	_powerups.clear()
 
+func _build_blaster_mounts() -> void:
+	_blaster_root = Node3D.new()
+	_blaster_root.name = "PaddleBlasterMounts"
+	paddle_root.add_child(_blaster_root)
+	_blaster_mounts.clear()
+	for i in range(2):
+		var mount := MeshInstance3D.new()
+		mount.name = "BlasterEmitter%d" % i
+		var mesh := BoxMesh.new()
+		mesh.size = Vector3(0.16, 0.42, 0.18)
+		mount.mesh = mesh
+		mount.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
+		var material := StandardMaterial3D.new()
+		material.transparency = BaseMaterial3D.TRANSPARENCY_ALPHA
+		material.blend_mode = BaseMaterial3D.BLEND_MODE_ADD
+		material.shading_mode = BaseMaterial3D.SHADING_MODE_UNSHADED
+		material.albedo_color = Color(1.0, 0.86, 0.18, 0.0)
+		material.emission_enabled = true
+		material.emission = Color(1.0, 0.58, 0.08)
+		material.emission_energy_multiplier = 1.8
+		mount.material_override = material
+		mount.visible = false
+		_blaster_root.add_child(mount)
+		_blaster_mounts.append(mount)
+
+func _make_blaster_shot_node() -> MeshInstance3D:
+	var node := MeshInstance3D.new()
+	node.name = "BlasterShot"
+	var mesh := BoxMesh.new()
+	mesh.size = Vector3(0.13, 0.82, 0.13)
+	node.mesh = mesh
+	node.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
+	var material := StandardMaterial3D.new()
+	material.transparency = BaseMaterial3D.TRANSPARENCY_ALPHA
+	material.blend_mode = BaseMaterial3D.BLEND_MODE_ADD
+	material.no_depth_test = true
+	material.shading_mode = BaseMaterial3D.SHADING_MODE_UNSHADED
+	material.albedo_color = Color(1.0, 0.88, 0.22, 0.9)
+	material.emission_enabled = true
+	material.emission = Color(1.0, 0.46, 0.08)
+	material.emission_energy_multiplier = 2.8
+	node.material_override = material
+	return node
+
 func _make_powerup_node(power_type: String) -> MeshInstance3D:
 	var node := MeshInstance3D.new()
 	node.name = "Powerup%s" % power_type
@@ -947,10 +1008,12 @@ func _maybe_spawn_powerup(brick: Node) -> void:
 
 func _pick_powerup_type() -> String:
 	var roll := randf()
-	if roll < 0.42:
+	if roll < 0.34:
 		return POWERUP_WIDE
-	if roll < 0.76:
+	if roll < 0.62:
 		return POWERUP_SLOW
+	if roll < 0.82:
+		return POWERUP_BLASTER
 	return POWERUP_BLAST
 
 func _powerup_color(power_type: String) -> Color:
@@ -961,6 +1024,8 @@ func _powerup_color(power_type: String) -> Color:
 			return Color(0.22, 0.52, 1.0, 0.82)
 		POWERUP_BLAST:
 			return Color(1.0, 0.22, 0.82, 0.86)
+		POWERUP_BLASTER:
+			return Color(1.0, 0.72, 0.12, 0.88)
 		_:
 			return Color(1.0, 0.9, 0.2, 0.82)
 
@@ -1005,6 +1070,10 @@ func _collect_powerup(power_type: String, origin: Vector3) -> void:
 		POWERUP_BLAST:
 			_blast_nearby_bricks(3)
 			_show_message("PRISM BLAST MODULE", 0.8)
+		POWERUP_BLASTER:
+			_blaster_timer = POWERUP_BLASTER_DURATION
+			_blaster_fire_cooldown = 0.0
+			_show_message("STABILIZER BLASTER ONLINE", 0.8)
 	RunManager.add_score(180)
 	_spawn_ball_impact_burst(origin, _powerup_color(power_type), 1.25)
 	_flash_paddle()
@@ -1022,6 +1091,110 @@ func _collect_powerup(power_type: String, origin: Vector3) -> void:
 func _step_powerup_timers(delta: float) -> void:
 	_wide_timer = maxf(_wide_timer - delta, 0.0)
 	_slow_timer = maxf(_slow_timer - delta, 0.0)
+	_blaster_timer = maxf(_blaster_timer - delta, 0.0)
+	if _blaster_timer <= 0.0:
+		_blaster_fire_cooldown = 0.0
+
+func _step_blaster(delta: float) -> void:
+	_update_blaster_mounts()
+	if _blaster_timer > 0.0 and not _pending_transition and not _tutorial_pause_active:
+		_blaster_fire_cooldown = maxf(_blaster_fire_cooldown - delta, 0.0)
+		if _blaster_fire_cooldown <= 0.0:
+			_fire_blaster_shot()
+			_blaster_fire_cooldown = BLASTER_FIRE_INTERVAL
+	_step_blaster_shots(delta)
+
+func _update_blaster_mounts() -> void:
+	if _blaster_mounts.is_empty():
+		return
+	var active := _blaster_timer > 0.0
+	var current_width := _effective_paddle_width()
+	for i in range(_blaster_mounts.size()):
+		var mount := _blaster_mounts[i]
+		mount.visible = active
+		if not active:
+			continue
+		var side := -1.0 if i == 0 else 1.0
+		var mount_theta := TunnelMath.wrap_angle(_paddle_theta + side * current_width * 0.32)
+		var tangent: Vector3 = Vector3(-sin(mount_theta), cos(mount_theta), 0.0).normalized()
+		var forward: Vector3 = TUNNEL_FORWARD
+		var inward: Vector3 = -Vector3(cos(mount_theta), sin(mount_theta), 0.0).normalized()
+		mount.position = TunnelMath.surface_to_world(mount_theta, _paddle_z + 0.1, _play_radius - 0.06)
+		mount.basis = Basis(tangent, forward, inward).orthonormalized()
+		var pulse := 1.0 + 0.16 * sin(_visual_time * 12.0 + float(i) * 1.7)
+		mount.scale = Vector3.ONE * pulse
+
+func _fire_blaster_shot() -> void:
+	if _blaster_root == null:
+		return
+	var node := _make_blaster_shot_node()
+	$World.add_child(node)
+	var shot := {
+		"node": node,
+		"theta": _paddle_theta,
+		"z": _paddle_z + 0.45,
+		"age": 0.0
+	}
+	_blaster_shots.append(shot)
+	_place_blaster_shot(shot)
+	_pulse_haptic(16, 0.32)
+
+func _place_blaster_shot(shot: Dictionary) -> void:
+	var node: MeshInstance3D = shot.get("node")
+	if node == null or not is_instance_valid(node):
+		return
+	var theta := float(shot.get("theta", 0.0))
+	var z := float(shot.get("z", 0.0))
+	var tangent: Vector3 = Vector3(-sin(theta), cos(theta), 0.0).normalized()
+	var forward: Vector3 = TUNNEL_FORWARD
+	var inward: Vector3 = -Vector3(cos(theta), sin(theta), 0.0).normalized()
+	node.position = TunnelMath.surface_to_world(theta, z, _play_radius - 0.04)
+	node.basis = Basis(tangent, forward, inward).orthonormalized()
+
+func _step_blaster_shots(delta: float) -> void:
+	if _blaster_shots.is_empty():
+		return
+	for i in range(_blaster_shots.size() - 1, -1, -1):
+		var shot := _blaster_shots[i]
+		var node: MeshInstance3D = shot.get("node")
+		if node == null or not is_instance_valid(node):
+			_blaster_shots.remove_at(i)
+			continue
+		shot["z"] = float(shot.get("z", 0.0)) + BLASTER_SHOT_SPEED * delta
+		shot["age"] = float(shot.get("age", 0.0)) + delta
+		if float(shot["age"]) >= BLASTER_SHOT_LIFETIME or float(shot["z"]) > _level_end_z + 2.0:
+			node.queue_free()
+			_blaster_shots.remove_at(i)
+			continue
+		_place_blaster_shot(shot)
+		if _check_blaster_shot_hit(float(shot["theta"]), float(shot["z"]), node.global_position):
+			node.queue_free()
+			_blaster_shots.remove_at(i)
+
+func _check_blaster_shot_hit(theta: float, z: float, origin: Vector3) -> bool:
+	for i in range(_bricks.size() - 1, -1, -1):
+		var brick: Node = _bricks[i]
+		if brick == null or not is_instance_valid(brick):
+			_bricks.remove_at(i)
+			continue
+		var hit_info: Dictionary = Collision.ball_vs_brick(
+			theta,
+			z,
+			brick.get_collision_data(BLASTER_SHOT_RADIUS_THETA, BLASTER_SHOT_RADIUS_Z)
+		)
+		if not bool(hit_info.get("hit", false)):
+			continue
+		var destroyed: bool = brick.apply_hit()
+		_spawn_ball_impact_burst(origin, Color(1.0, 0.66, 0.08), 0.9 if destroyed else 0.65)
+		_start_camera_shake(0.034, 0.11)
+		RunManager.add_score(140 if destroyed else 70)
+		if destroyed:
+			brick.queue_free()
+			_bricks.remove_at(i)
+			if _bricks.is_empty():
+				_complete_level()
+		return true
+	return false
 
 func _blast_nearby_bricks(limit: int) -> void:
 	var removed := 0
@@ -1048,6 +1221,13 @@ func _clear_powerups() -> void:
 		if node != null and is_instance_valid(node):
 			node.queue_free()
 	_powerups.clear()
+
+func _clear_blaster_shots() -> void:
+	for shot in _blaster_shots:
+		var node: MeshInstance3D = shot.get("node")
+		if node != null and is_instance_valid(node):
+			node.queue_free()
+	_blaster_shots.clear()
 
 func _build_paddle_segments() -> void:
 	for child in paddle_root.get_children():
@@ -2445,6 +2625,8 @@ func _powerup_status_text() -> String:
 		parts.append("WIDE MODULE %.0fs" % ceilf(_wide_timer))
 	if _slow_timer > 0.0:
 		parts.append("SLOW MODULE %.0fs" % ceilf(_slow_timer))
+	if _blaster_timer > 0.0:
+		parts.append("BLASTER MODULE %.0fs" % ceilf(_blaster_timer))
 	return "  ".join(parts)
 
 static func hud_signal_text(score: int) -> String:
@@ -2469,6 +2651,8 @@ static func powerup_tutorial_text(power_type: String) -> String:
 			return "Slow modules calm the pulse, reducing tunnel speed so you can recover under pressure."
 		POWERUP_BLAST:
 			return "Prism blast modules shatter nearby signal fragments and push your charge upward."
+		POWERUP_BLASTER:
+			return "Blaster modules add an auto-firing cannon to the stabilizer, punching signal fragments ahead of the ball."
 		_:
 			return "Signal modules change the run temporarily. Catch them with the stabilizer before they drift away."
 
@@ -2480,5 +2664,7 @@ static func powerup_display_name(power_type: String) -> String:
 			return "Slow"
 		POWERUP_BLAST:
 			return "Prism Blast"
+		POWERUP_BLASTER:
+			return "Blaster"
 		_:
 			return power_type.capitalize()
