@@ -42,6 +42,7 @@ static func _normalize_level(level_data: Dictionary, level_index: int) -> Dictio
 	normalized["start_speed_z"] = float(level_data.get("start_speed_z", 8.0))
 	normalized["tunnel_layout"] = String(level_data.get("tunnel_layout", ""))
 	normalized["portal_light"] = String(level_data.get("portal_light", ""))
+	normalized["tunnel_bend"] = _normalize_tunnel_bend(level_data.get("tunnel_bend", {}))
 
 	var bricks: Array[Dictionary] = []
 	var source_bricks: Array = level_data.get("bricks", [])
@@ -57,3 +58,16 @@ static func _normalize_level(level_data: Dictionary, level_index: int) -> Dictio
 		})
 	normalized["bricks"] = bricks
 	return normalized
+
+static func _normalize_tunnel_bend(raw_bend: Variant) -> Dictionary:
+	var source: Dictionary = {}
+	if typeof(raw_bend) == TYPE_DICTIONARY:
+		source = raw_bend
+	return {
+		"enabled": bool(source.get("enabled", false)),
+		"amplitude": maxf(float(source.get("amplitude", 1.0)), 0.0),
+		"frequency": maxf(float(source.get("frequency", 1.0)), 0.0),
+		"speed": float(source.get("speed", 0.18)),
+		"phase": float(source.get("phase", 0.0)),
+		"time": 0.0
+	}

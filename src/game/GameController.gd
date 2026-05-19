@@ -16,7 +16,6 @@ const MANDELBROT_PORTAL_SHADER: Shader = preload("res://src/shaders/fractals/man
 const TUNNEL_LIGHT_PORTAL_SHADER: Shader = preload("res://src/shaders/tunnel_light_portal.gdshader")
 const TUNNEL_FRACTAL_SHADER: Shader = preload("res://src/shaders/fractals/tunnel_fractal_wrap.gdshader")
 const SHADERTOY_ENERGY_BALL_SHADER: Shader = preload("res://src/shaders/shadertoy_energy_ball.gdshader")
-const TUNNEL_FORWARD: Vector3 = Vector3(0.0, 0.0, 1.0)
 const BALL_THETA_RADIUS: float = 0.12
 const BALL_Z_RADIUS: float = 0.34
 const BALL_WORLD_RADIUS: float = 0.23
@@ -62,6 +61,8 @@ const TUNNEL_TEXTURE_BASE_SPEED: float = 0.62
 const TUNNEL_TEXTURE_MAX_SPEED: float = 2.6
 const TUNNEL_TEXTURE_SPEED_ACCELERATION: float = 1.1
 const TUNNEL_LAYOUT_TRANSITION_DURATION: float = 1.15
+const TUNNEL_BEND_RING_SPACING: float = 1.25
+const TUNNEL_BEND_RADIAL_SEGMENTS: int = 64
 const TUNNEL_LAYOUT_LINEUP_ENV := "WORM_BREAKER_TUNNEL_LINEUP"
 const TUNNEL_LAYOUT_DEFAULT := "neon_circuit_octagon"
 const TUNNEL_LAYOUT_DEFAULT_LINEUP: Array[String] = ["neon_circuit_octagon", "amber_crystal_lattice", "blue_waveform_rings", "violet_nebula_kaleido"]
@@ -350,6 +351,8 @@ var _previous_tunnel_layout_id: String = TUNNEL_LAYOUT_DEFAULT
 var _target_tunnel_layout_id: String = TUNNEL_LAYOUT_DEFAULT
 var _tunnel_layout_transition_time: float = TUNNEL_LAYOUT_TRANSITION_DURATION
 var _tunnel_background_texture_cache: Dictionary = {}
+var _tunnel_bend_profile: Dictionary = {}
+var _tunnel_bend_time: float = 0.0
 var _device_audio_analyzer: Object
 var _device_audio_available: bool = false
 var _device_audio_energy: float = 0.0
@@ -467,6 +470,7 @@ func _physics_process(delta: float) -> void:
 	_step_device_audio_pulse(delta)
 	_step_tunnel_texture_motion(delta)
 	_step_tunnel_layout_transition(delta)
+	_step_tunnel_bend(delta)
 	_update_psychedelic_materials()
 	_update_fractal_overlay()
 	_update_impact_particles(delta)
@@ -536,7 +540,7 @@ func _step_ball(delta: float) -> void:
 			_ball_v_theta = float(bounce.get("v_theta", _ball_v_theta))
 			_ball_v_z = float(bounce.get("v_z", absf(_ball_v_z)))
 			_ball_z = _paddle_z + 0.02
-			_spawn_ball_impact_burst(TunnelMath.surface_to_world(_ball_theta, _ball_z, _play_radius), Color(0.05, 1.0, 0.82), 1.0)
+			_spawn_ball_impact_burst(_surface_to_world(_ball_theta, _ball_z, _play_radius), Color(0.05, 1.0, 0.82), 1.0)
 			_pulse_haptic(28, 0.45)
 			_flash_paddle()
 			_chain_combo = 0
@@ -576,7 +580,7 @@ func _check_brick_hits() -> void:
 
 		_apply_brick_reflection(hit_info)
 		var destroyed: bool = brick.apply_hit()
-		_spawn_ball_impact_burst(TunnelMath.surface_to_world(_ball_theta, _ball_z, _play_radius), Color(1.0, 0.18, 0.92), 1.15 if destroyed else 0.85)
+		_spawn_ball_impact_burst(_surface_to_world(_ball_theta, _ball_z, _play_radius), Color(1.0, 0.18, 0.92), 1.15 if destroyed else 0.85)
 		_pulse_haptic(34 if destroyed else 22, 0.64 if destroyed else 0.42)
 		if destroyed:
 			_start_camera_shake(0.055, 0.16)
@@ -686,6 +690,8 @@ func _load_level(level_index: int) -> void:
 	if rot_input != null and rot_input.has_method("reset"):
 		rot_input.reset()
 	_level_end_z = _compute_level_end_z()
+	_tunnel_bend_time = 0.0
+	_tunnel_bend_profile = _level_bend_profile_at_time(_tunnel_bend_time)
 	_begin_tunnel_layout_for_level(level_index, _tunnel_material == null)
 	_begin_portal_light_for_level(level_index)
 
@@ -718,18 +724,60 @@ func _compute_level_end_z() -> float:
 		farthest_brick_z = max(farthest_brick_z, float(brick.get("z_center", 12.0)) + brick_z_size * 0.6)
 	return max(24.0, farthest_brick_z + 6.0)
 
+func _level_bend_profile_at_time(time_seconds: float) -> Dictionary:
+	var bend: Dictionary = {}
+	var raw_bend: Variant = _level_data.get("tunnel_bend", {})
+	if typeof(raw_bend) == TYPE_DICTIONARY:
+		bend = raw_bend
+	var profile := bend.duplicate()
+	profile["time"] = time_seconds
+	return profile
+
+func _tunnel_bend_enabled() -> bool:
+	return TunnelMath.bend_enabled(_tunnel_bend_profile)
+
+func _surface_to_world(theta: float, z: float, radius: float) -> Vector3:
+	return TunnelMath.surface_to_world(theta, z, radius, _tunnel_bend_profile)
+
+func _surface_basis(theta: float, z: float) -> Basis:
+	return TunnelMath.surface_basis(theta, z, _tunnel_bend_profile)
+
+func _tube_tangent(z: float) -> Vector3:
+	return TunnelMath.tube_tangent(z, _tunnel_bend_profile)
+
+func _tube_radial(theta: float, z: float) -> Vector3:
+	return TunnelMath.radial_from_angle(theta, z, _tunnel_bend_profile)
+
+func _step_tunnel_bend(delta: float) -> void:
+	if not _tunnel_bend_enabled():
+		return
+	_tunnel_bend_time += delta
+	_tunnel_bend_profile = _level_bend_profile_at_time(_tunnel_bend_time)
+	if tunnel != null:
+		tunnel.mesh = _build_bent_tunnel_mesh()
+	_position_tunnel_end_portal()
+	_reset_ball_tracers()
+	for brick in _bricks:
+		if brick != null and is_instance_valid(brick) and brick.has_method("refresh_bend_profile"):
+			brick.call("refresh_bend_profile", _tunnel_bend_profile)
+
 func _refresh_tunnel_visual() -> void:
-	var cylinder: CylinderMesh = CylinderMesh.new()
-	cylinder.top_radius = _play_radius + PADDLE_SURFACE_INSET + 0.2
-	cylinder.bottom_radius = cylinder.top_radius
-	cylinder.height = _level_end_z + 16.0
-	cylinder.radial_segments = 48
-	cylinder.rings = 12
-	cylinder.cap_top = false
-	cylinder.cap_bottom = false
-	tunnel.mesh = cylinder
-	tunnel.rotation_degrees = Vector3(90.0, 0.0, 0.0)
-	tunnel.position = Vector3(0.0, 0.0, (_level_end_z * 0.5) + 3.0)
+	if _tunnel_bend_enabled():
+		tunnel.mesh = _build_bent_tunnel_mesh()
+		tunnel.rotation = Vector3.ZERO
+		tunnel.position = Vector3.ZERO
+	else:
+		var cylinder: CylinderMesh = CylinderMesh.new()
+		cylinder.top_radius = _play_radius + PADDLE_SURFACE_INSET + 0.2
+		cylinder.bottom_radius = cylinder.top_radius
+		cylinder.height = _level_end_z + 16.0
+		cylinder.radial_segments = 48
+		cylinder.rings = 12
+		cylinder.cap_top = false
+		cylinder.cap_bottom = false
+		tunnel.mesh = cylinder
+		tunnel.rotation_degrees = Vector3(90.0, 0.0, 0.0)
+		tunnel.position = Vector3(0.0, 0.0, (_level_end_z * 0.5) + 3.0)
 
 	var tunnel_material := ShaderMaterial.new()
 	tunnel_material.shader = TUNNEL_FRACTAL_SHADER
@@ -744,6 +792,42 @@ func _refresh_tunnel_visual() -> void:
 	_tunnel_material = tunnel_material
 	_apply_tunnel_layout_material(0.86, 0.0)
 	_position_tunnel_end_portal()
+
+func _build_bent_tunnel_mesh() -> ArrayMesh:
+	var radius := _play_radius + PADDLE_SURFACE_INSET + 0.2
+	var z_start := -5.0
+	var z_end := _level_end_z + 11.0
+	var ring_count := maxi(4, int(ceil((z_end - z_start) / TUNNEL_BEND_RING_SPACING)) + 1)
+	var vertices := PackedVector3Array()
+	var normals := PackedVector3Array()
+	var uvs := PackedVector2Array()
+	var indices := PackedInt32Array()
+	for zi in range(ring_count):
+		var t := float(zi) / float(maxi(1, ring_count - 1))
+		var z := lerpf(z_start, z_end, t)
+		for ai in range(TUNNEL_BEND_RADIAL_SEGMENTS):
+			var theta := TAU * float(ai) / float(TUNNEL_BEND_RADIAL_SEGMENTS)
+			var radial := TunnelMath.radial_from_angle(theta, z, _tunnel_bend_profile)
+			vertices.append(TunnelMath.surface_to_world(theta, z, radius, _tunnel_bend_profile))
+			normals.append(radial)
+			uvs.append(Vector2(float(ai) / float(TUNNEL_BEND_RADIAL_SEGMENTS), t))
+	for zi in range(ring_count - 1):
+		for ai in range(TUNNEL_BEND_RADIAL_SEGMENTS):
+			var next_ai := (ai + 1) % TUNNEL_BEND_RADIAL_SEGMENTS
+			var a := zi * TUNNEL_BEND_RADIAL_SEGMENTS + ai
+			var b := zi * TUNNEL_BEND_RADIAL_SEGMENTS + next_ai
+			var c := (zi + 1) * TUNNEL_BEND_RADIAL_SEGMENTS + ai
+			var d := (zi + 1) * TUNNEL_BEND_RADIAL_SEGMENTS + next_ai
+			indices.append_array(PackedInt32Array([a, c, b, b, c, d]))
+	var arrays: Array = []
+	arrays.resize(Mesh.ARRAY_MAX)
+	arrays[Mesh.ARRAY_VERTEX] = vertices
+	arrays[Mesh.ARRAY_NORMAL] = normals
+	arrays[Mesh.ARRAY_TEX_UV] = uvs
+	arrays[Mesh.ARRAY_INDEX] = indices
+	var mesh := ArrayMesh.new()
+	mesh.add_surface_from_arrays(Mesh.PRIMITIVE_TRIANGLES, arrays)
+	return mesh
 
 func _build_tunnel_end_portal() -> void:
 	_portal_fractal_cap = MeshInstance3D.new()
@@ -780,11 +864,14 @@ func _position_tunnel_end_portal() -> void:
 	var portal_radius: float = _play_radius + PADDLE_SURFACE_INSET + 0.12
 	var portal_mesh := _build_disc_mesh(portal_radius, 128)
 	_portal_fractal_cap.mesh = portal_mesh
-	_portal_fractal_cap.position = Vector3(0.0, 0.0, _level_end_z + 0.06)
-	_portal_fractal_cap.rotation = Vector3.ZERO
+	var portal_basis := TunnelMath.portal_basis(_level_end_z, _tunnel_bend_profile)
+	var portal_forward := _tube_tangent(_level_end_z)
+	var portal_center := TunnelMath.tube_center(_level_end_z, _tunnel_bend_profile)
+	_portal_fractal_cap.position = portal_center + portal_forward * 0.06
+	_portal_fractal_cap.basis = portal_basis
 	_portal_cap.mesh = portal_mesh
-	_portal_cap.position = Vector3(0.0, 0.0, _level_end_z)
-	_portal_cap.rotation = Vector3.ZERO
+	_portal_cap.position = portal_center
+	_portal_cap.basis = portal_basis
 	_reset_signal_gate_shards()
 
 func _build_signal_gate_shards() -> void:
@@ -853,8 +940,8 @@ func _reset_signal_gate_shards() -> void:
 		if node == null or not is_instance_valid(node):
 			continue
 		node.visible = false
-		node.position = Vector3(0.0, 0.0, _level_end_z + 0.03)
-		node.rotation = Vector3.ZERO
+		node.position = TunnelMath.tube_center(_level_end_z, _tunnel_bend_profile) + _tube_tangent(_level_end_z) * 0.03
+		node.basis = TunnelMath.portal_basis(_level_end_z, _tunnel_bend_profile)
 		node.scale = Vector3.ONE
 		if material != null:
 			material.albedo_color = Color(0.2, 1.0, 0.94, 0.0)
@@ -867,9 +954,12 @@ func _step_signal_gate_shards(progress: float) -> void:
 			continue
 		var direction: Vector2 = shard.get("direction", Vector2.RIGHT)
 		var travel: float = float(shard.get("travel", 1.5)) * progress * progress
+		var portal_basis := TunnelMath.portal_basis(_level_end_z, _tunnel_bend_profile)
+		var center := TunnelMath.tube_center(_level_end_z, _tunnel_bend_profile)
+		var forward := _tube_tangent(_level_end_z)
 		node.visible = progress > 0.02 and progress < 0.98
-		node.position = Vector3(direction.x * travel, direction.y * travel, _level_end_z + 0.04 + progress * 2.8)
-		node.rotation = Vector3(progress * 0.9, progress * 0.55, progress * float(shard.get("spin", 1.5)))
+		node.position = center + portal_basis.x * direction.x * travel + portal_basis.y * direction.y * travel + forward * (0.04 + progress * 2.8)
+		node.basis = portal_basis.rotated(portal_basis.x, progress * 0.9).rotated(portal_basis.y, progress * 0.55).rotated(portal_basis.z, progress * float(shard.get("spin", 1.5))).orthonormalized()
 		node.scale = Vector3.ONE * (1.0 + progress * 0.28)
 		if material != null:
 			var alpha := clampf((1.0 - progress) * 0.72, 0.0, 0.72)
@@ -1077,7 +1167,7 @@ func _maybe_spawn_powerup(brick: Node) -> void:
 	_powerup_root.add_child(node)
 	var theta := float(brick.get("theta_center"))
 	var z := float(brick.get("z_center"))
-	node.position = TunnelMath.surface_to_world(theta, z, _play_radius)
+	node.position = _surface_to_world(theta, z, _play_radius)
 	_powerups.append({
 		"type": power_type,
 		"theta": theta,
@@ -1124,7 +1214,7 @@ func _step_powerups(delta: float) -> void:
 		var age := float(powerup["age"]) + delta
 		powerup["z"] = z
 		powerup["age"] = age
-		node.position = TunnelMath.surface_to_world(theta, z, _play_radius)
+		node.position = _surface_to_world(theta, z, _play_radius)
 		node.scale = Vector3.ONE * (0.88 + 0.24 * sin(_visual_time * 7.0 + age * 2.0))
 		node.rotate_z(delta * 2.8)
 
@@ -1197,11 +1287,8 @@ func _update_blaster_mounts() -> void:
 			continue
 		var side := -1.0 if i == 0 else 1.0
 		var mount_theta := TunnelMath.wrap_angle(_paddle_theta + side * current_width * 0.32)
-		var tangent: Vector3 = Vector3(-sin(mount_theta), cos(mount_theta), 0.0).normalized()
-		var forward: Vector3 = TUNNEL_FORWARD
-		var inward: Vector3 = -Vector3(cos(mount_theta), sin(mount_theta), 0.0).normalized()
-		mount.position = TunnelMath.surface_to_world(mount_theta, _paddle_z + 0.1, _play_radius - 0.06)
-		mount.basis = Basis(tangent, forward, inward).orthonormalized()
+		mount.position = _surface_to_world(mount_theta, _paddle_z + 0.1, _play_radius - 0.06)
+		mount.basis = _surface_basis(mount_theta, _paddle_z + 0.1)
 		var pulse := 1.0 + 0.16 * sin(_visual_time * 12.0 + float(i) * 1.7)
 		mount.scale = Vector3.ONE * pulse
 
@@ -1226,11 +1313,8 @@ func _place_blaster_shot(shot: Dictionary) -> void:
 		return
 	var theta := float(shot.get("theta", 0.0))
 	var z := float(shot.get("z", 0.0))
-	var tangent: Vector3 = Vector3(-sin(theta), cos(theta), 0.0).normalized()
-	var forward: Vector3 = TUNNEL_FORWARD
-	var inward: Vector3 = -Vector3(cos(theta), sin(theta), 0.0).normalized()
-	node.position = TunnelMath.surface_to_world(theta, z, _play_radius - 0.04)
-	node.basis = Basis(tangent, forward, inward).orthonormalized()
+	node.position = _surface_to_world(theta, z, _play_radius - 0.04)
+	node.basis = _surface_basis(theta, z)
 
 func _step_blaster_shots(delta: float) -> void:
 	if _blaster_shots.is_empty():
@@ -1347,11 +1431,8 @@ func _update_paddle_visual() -> void:
 			t = float(i) / float(_paddle_segments.size() - 1) - 0.5
 		var current_width: float = _effective_paddle_width()
 		var segment_theta: float = TunnelMath.wrap_angle(_paddle_theta + t * current_width)
-		var tangent: Vector3 = Vector3(-sin(segment_theta), cos(segment_theta), 0.0).normalized()
-		var forward: Vector3 = TUNNEL_FORWARD
-		var inward: Vector3 = -Vector3(cos(segment_theta), sin(segment_theta), 0.0).normalized()
-		segment.position = TunnelMath.surface_to_world(segment_theta, _paddle_z, _play_radius)
-		segment.basis = Basis(tangent, forward, inward).orthonormalized()
+		segment.position = _surface_to_world(segment_theta, _paddle_z, _play_radius)
+		segment.basis = _surface_basis(segment_theta, _paddle_z)
 
 		if segment.mesh is BoxMesh:
 			var mesh: BoxMesh = segment.mesh as BoxMesh
@@ -1375,14 +1456,14 @@ func _effective_paddle_width() -> float:
 	return _paddle_width * (1.42 if _wide_timer > 0.0 else 1.0)
 
 func _update_ball_visual() -> void:
-	ball_mesh.position = TunnelMath.surface_to_world(_ball_theta, _ball_z, _play_radius)
+	ball_mesh.position = _surface_to_world(_ball_theta, _ball_z, _play_radius)
 	var pulse := 1.0 + 0.18 * sin(_visual_time * 7.5)
 	ball_mesh.scale = Vector3.ONE * pulse
 	_update_ball_tracers(ball_mesh.position)
 
 func _reset_ball_tracers() -> void:
 	_ball_trail_points.clear()
-	var current_position := TunnelMath.surface_to_world(_ball_theta, _ball_z, _play_radius)
+	var current_position := _surface_to_world(_ball_theta, _ball_z, _play_radius)
 	for i in range(BALL_TRAIL_SEGMENT_COUNT):
 		_ball_trail_points.append(current_position)
 	_update_ball_tracers(current_position, true)
@@ -1418,7 +1499,7 @@ func _update_ball_tracers(current_position: Vector3, force: bool = false) -> voi
 		var fade := 1.0 - float(i) / float(maxi(1, BALL_GUIDE_SEGMENT_COUNT))
 		var hue := fmod(0.14 + _visual_time * 0.1 + float(i) * 0.05, 1.0)
 		guide.visible = true
-		guide.position = TunnelMath.surface_to_world(predicted_theta, predicted_z, _play_radius)
+		guide.position = _surface_to_world(predicted_theta, predicted_z, _play_radius)
 		guide.scale = Vector3.ONE * (0.75 - float(i) * 0.09)
 		var guide_material := _ball_guide_materials[i]
 		guide_material.albedo_color = Color.from_hsv(hue, 0.75, 1.0, 0.12 + fade * 0.18)
@@ -1428,9 +1509,9 @@ func _update_ball_tracers(current_position: Vector3, force: bool = false) -> voi
 func _spawn_ball_impact_burst(origin: Vector3, base_color: Color, intensity: float = 1.0) -> void:
 	if _impact_particles.is_empty():
 		return
-	var outward := Vector3(cos(_ball_theta), sin(_ball_theta), 0.0).normalized()
-	var tangent := Vector3(-sin(_ball_theta), cos(_ball_theta), 0.0).normalized()
-	var forward := TUNNEL_FORWARD
+	var outward := _tube_radial(_ball_theta, _ball_z)
+	var tangent := TunnelMath.tangent_from_angle(_ball_theta, _ball_z, _tunnel_bend_profile)
+	var forward := _tube_tangent(_ball_z)
 	for i in range(IMPACT_PARTICLE_COUNT):
 		var particle := _next_free_impact_particle()
 		if particle.is_empty():
@@ -1501,17 +1582,17 @@ func _spawn_bricks() -> void:
 		var brick_data: Dictionary = item
 		var brick: Node3D = BRICK_SCENE.instantiate() as Node3D
 		brick_root.add_child(brick)
-		brick.call("setup", brick_data, _play_radius, default_theta_size, default_z_size)
+		brick.call("setup", brick_data, _play_radius, default_theta_size, default_z_size, _tunnel_bend_profile)
 		_bricks.append(brick)
 	_initial_brick_count = _bricks.size()
 
 func _update_camera(delta: float, snap: bool = false) -> void:
 	# Adapted from wormhole_raiders AngleSystem camera strategy:
 	# scripts/systems/AngleSystem.gd::_update_camera
-	var paddle_pos: Vector3 = TunnelMath.surface_to_world(_paddle_theta, _paddle_z, _play_radius)
-	var outward: Vector3 = Vector3(cos(_paddle_theta), sin(_paddle_theta), 0.0).normalized()
+	var paddle_pos: Vector3 = _surface_to_world(_paddle_theta, _paddle_z, _play_radius)
+	var outward: Vector3 = _tube_radial(_paddle_theta, _paddle_z)
 	var inward: Vector3 = -outward
-	var forward: Vector3 = TUNNEL_FORWARD
+	var forward: Vector3 = _tube_tangent(_paddle_z)
 	var zoom_out: float = _camera_zoom_out_scale()
 	var target_fov: float = lerpf(CAMERA_BASE_FOV, CAMERA_MOBILE_FOV, clampf(zoom_out - 1.0, 0.0, 1.0))
 	camera.fov = lerpf(camera.fov, target_fov, 1.0 if snap else clampf(delta * 5.0, 0.0, 1.0))
@@ -2017,14 +2098,14 @@ static func signal_gate_hit_strength(hit_timer: float) -> float:
 
 func _hit_signal_gate() -> void:
 	_signal_gate_hit_timer = SIGNAL_GATE_HIT_DURATION
-	_spawn_ball_impact_burst(TunnelMath.surface_to_world(_ball_theta, _level_end_z, _play_radius), Color(0.14, 1.0, 0.96), 1.25)
+	_spawn_ball_impact_burst(_surface_to_world(_ball_theta, _level_end_z, _play_radius), Color(0.14, 1.0, 0.96), 1.25)
 	_start_camera_shake(0.035, 0.12)
 
 func _break_signal_gate() -> void:
 	_signal_gate_hit_timer = SIGNAL_GATE_HIT_DURATION
 	_signal_gate_break_progress = 0.01
 	_step_signal_gate_shards(_signal_gate_break_progress)
-	_spawn_ball_impact_burst(TunnelMath.surface_to_world(_ball_theta, _level_end_z, _play_radius), Color(1.0, 0.28, 0.92), 1.7)
+	_spawn_ball_impact_burst(_surface_to_world(_ball_theta, _level_end_z, _play_radius), Color(1.0, 0.28, 0.92), 1.7)
 
 func _step_portal_motion(delta: float) -> void:
 	if _portal_material == null and _portal_fractal_material == null:

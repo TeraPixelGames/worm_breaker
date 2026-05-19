@@ -11,6 +11,8 @@ var theta_center: float = 0.0
 var z_center: float = 0.0
 var theta_size: float = 0.42
 var z_size: float = 1.0
+var surface_radius: float = 6.0
+var bend_profile: Dictionary = {}
 
 var _material: ShaderMaterial
 var _flash_timer: float = 0.0
@@ -22,17 +24,23 @@ func _ready() -> void:
 	body.material_override = _material
 	_refresh_color()
 
-func setup(data: Dictionary, surface_radius: float, default_theta_size: float, default_z_size: float) -> void:
+func setup(data: Dictionary, brick_surface_radius: float, default_theta_size: float, default_z_size: float, level_bend_profile: Dictionary = {}) -> void:
 	theta_center = float(data.get("theta_center", 0.0))
 	z_center = float(data.get("z_center", 12.0))
 	theta_size = float(data.get("theta_size", default_theta_size))
 	z_size = float(data.get("z_size", default_z_size))
 	hp = max(1, int(data.get("hp", 1)))
 	max_hp = hp
+	surface_radius = brick_surface_radius
+	bend_profile = level_bend_profile.duplicate()
 	_phase = fmod(absf(theta_center) * 0.73 + z_center * 0.11, 1.0)
 
-	_place_on_surface(surface_radius)
+	refresh_bend_profile(bend_profile)
 	_refresh_color()
+
+func refresh_bend_profile(level_bend_profile: Dictionary) -> void:
+	bend_profile = level_bend_profile.duplicate()
+	_place_on_surface()
 
 func apply_hit() -> bool:
 	hp = max(0, hp - 1)
@@ -55,12 +63,9 @@ func _process(delta: float) -> void:
 	_flash_timer = max(_flash_timer - delta, 0.0)
 	_refresh_color()
 
-func _place_on_surface(surface_radius: float) -> void:
-	position = TunnelMath.surface_to_world(theta_center, z_center, surface_radius)
-	var tangent: Vector3 = Vector3(-sin(theta_center), cos(theta_center), 0.0).normalized()
-	var forward: Vector3 = Vector3.FORWARD
-	var inward: Vector3 = -Vector3(cos(theta_center), sin(theta_center), 0.0).normalized()
-	basis = Basis(tangent, forward, inward).orthonormalized()
+func _place_on_surface() -> void:
+	position = TunnelMath.surface_to_world(theta_center, z_center, surface_radius, bend_profile)
+	basis = TunnelMath.surface_basis(theta_center, z_center, bend_profile)
 
 	if body.mesh is BoxMesh:
 		var box: BoxMesh = body.mesh as BoxMesh
