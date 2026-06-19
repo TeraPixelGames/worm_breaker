@@ -32,13 +32,11 @@ Fx="*res://addons/arcade_core/Fx.gd"
 AdManager="*res://addons/arcade_core/AdManager.gd"
 WebAudioCapture="*res://src/core/WebAudioCapture.gd"
 
+_mcp_game_helper="*res://addons/godot_ai/runtime/game_helper.gd"
+
 [audio]
 
 driver/enable_input=true
-
-[editor_plugins]
-
-enabled=PackedStringArray("res://addons/android_system_audio_capture/plugin.cfg")
 
 [display]
 
@@ -49,6 +47,10 @@ window/size/resizable=true
 window/stretch/mode="canvas_items"
 window/stretch/aspect="expand"
 window/handheld/orientation=1
+
+[editor_plugins]
+
+enabled=PackedStringArray("res://addons/android_system_audio_capture/plugin.cfg", "res://addons/godot_ai/plugin.cfg")
 
 [rendering]
 
