@@ -1,6 +1,7 @@
-[gd_scene load_steps=5 format=3]
+[gd_scene load_steps=6 format=3]
 
 [ext_resource type="Script" path="res://src/ui/MainMenu.gd" id="1"]
+[ext_resource type="Texture2D" path="res://assets/marketing/logo_horizontal.png" id="2_logo"]
 
 [sub_resource type="StyleBoxFlat" id="1_primary"]
 bg_color = Color(0.88, 0.72, 0.34, 0.96)
@@ -91,7 +92,17 @@ horizontal_alignment = 1
 theme_override_colors/font_color = Color(1, 0.82, 0.48, 0.92)
 theme_override_font_sizes/font_size = 20
 
+[node name="LogoArt" type="TextureRect" parent="Center/Panel/VBox"]
+custom_minimum_size = Vector2(0, 108)
+layout_mode = 2
+size_flags_horizontal = 3
+mouse_filter = 2
+texture = ExtResource("2_logo")
+expand_mode = 1
+stretch_mode = 5
+
 [node name="TitleLabel" type="Label" parent="Center/Panel/VBox"]
+visible = false
 layout_mode = 2
 theme_override_font_sizes/font_size = 62
 theme_override_colors/font_color = Color(1, 0.97, 0.92, 1)

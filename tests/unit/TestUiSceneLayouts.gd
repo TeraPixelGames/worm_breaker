@@ -15,6 +15,11 @@ func test_main_menu_launch_deck_stays_inside_viewports() -> void:
 		assert_true(panel.position.y >= 0.0, "Main menu panel should stay inside top edge for %s" % viewport_size)
 		assert_true(panel.position.x + panel.size.x <= viewport_size.x, "Main menu panel should stay inside right edge for %s" % viewport_size)
 		assert_true(panel.position.y + panel.size.y <= viewport_size.y, "Main menu panel should stay inside bottom edge for %s" % viewport_size)
+		var logo_art := menu.get_node("Center/Panel/VBox/LogoArt") as TextureRect
+		var title_label := menu.get_node("Center/Panel/VBox/TitleLabel") as Label
+		assert_true(logo_art.visible, "Main menu should display the generated Worm Breaker logo")
+		assert_true(title_label.visible == false, "Old text logo should remain hidden behind the generated art")
+		assert_equal(logo_art.texture.resource_path, "res://assets/marketing/logo_horizontal.png", "Main menu should use the generated marketing logo")
 		assert_equal((menu.get_node("Center/Panel/VBox/StartButton") as Button).text, "PRESS TO LAUNCH", "Primary launch copy should be cinematic prompt text")
 		menu.queue_free()
 		await get_tree().process_frame

@@ -8,6 +8,7 @@ const JULIA_SHADER: Shader = preload("res://src/shaders/fractals/julia_set.gdsha
 @onready var panel: Panel = $Center/Panel
 @onready var vbox: VBoxContainer = $Center/Panel/VBox
 @onready var title_label: Label = $Center/Panel/VBox/TitleLabel
+@onready var logo_art: TextureRect = $Center/Panel/VBox/LogoArt
 @onready var subtitle_label: Label = $Center/Panel/VBox/SubtitleLabel
 @onready var signal_label: Label = $Center/Panel/VBox/SignalLabel
 @onready var start_button: Button = $Center/Panel/VBox/StartButton
@@ -50,6 +51,8 @@ func _process(delta: float) -> void:
 		ring.scale = Vector2.ONE * (1.0 + pulse * 0.026)
 		ring.modulate.a = 0.12 + pulse * 0.2
 	start_button.scale = Vector2.ONE * (1.0 + sin(_time * 1.8) * 0.01)
+	if logo_art != null:
+		logo_art.scale = Vector2.ONE * (1.0 + sin(_time * 1.35) * 0.008)
 	panel.scale = Vector2.ONE
 	if _fractal_material != null:
 		_fractal_material.set_shader_parameter("zoom", 1.0 + 0.07 * sin(_time * 0.28))
@@ -146,7 +149,12 @@ func _apply_launch_deck_style() -> void:
 	kicker_label.add_theme_font_size_override("font_size", 18)
 	kicker_label.add_theme_color_override("font_color", Color(0.16, 1.0, 0.9, 0.94))
 	kicker_label.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+	if logo_art != null:
+		logo_art.visible = true
+		logo_art.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+		logo_art.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	title_label.text = "WORM BREAKER"
+	title_label.visible = false
 	title_label.add_theme_font_size_override("font_size", 68)
 	title_label.add_theme_color_override("font_color", Color(1.0, 0.94, 0.55))
 	title_label.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
@@ -228,6 +236,8 @@ func _update_launch_deck_layout() -> void:
 	var panel_width: float = min(PANEL_MAX_WIDTH, available_width)
 	var panel_height: float = min(PANEL_MAX_HEIGHT, maxf(viewport_size.y - safe_margin * 2.0, 320.0))
 	panel.custom_minimum_size = Vector2(panel_width, panel_height)
+	if logo_art != null:
+		logo_art.custom_minimum_size = Vector2(0, clamp(panel_height * 0.22, 88.0, 112.0))
 	panel.set_anchors_preset(Control.PRESET_TOP_LEFT)
 	var panel_x: float = maxf(safe_margin, (viewport_size.x - panel_width) * 0.5)
 	var panel_y: float = maxf(safe_margin, viewport_size.y - panel_height - safe_margin)
@@ -253,6 +263,8 @@ func _update_panel_pivot() -> void:
 	if panel == null:
 		return
 	panel.pivot_offset = panel.size * 0.5
+	if logo_art != null:
+		logo_art.pivot_offset = logo_art.size * 0.5
 
 func _style_button(button: Button, fill: Color, font: Color) -> void:
 	button.custom_minimum_size = Vector2(430, 68)
